@@ -4,49 +4,17 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useParams, useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { Bookmark, Hash, ArrowLeft, Heart } from 'lucide-react';
 import Link from 'next/link';
 import { User } from '@supabase/supabase-js';
-
-interface Database {
-  public: {
-    Tables: {
-      blogs: {
-        Row: {
-          id: string;
-          title: string;
-          content: string;
-          cover_image: string | null;
-          author_id: string;
-          tags: string[];
-          created_at: string;
-          author: {
-            id: string;
-            username: string;
-            avatar_url: string;
-          };
-          likes: { count: number }[];
-          bookmarks: { count: number }[];
-          is_bookmarked?: boolean;
-          is_liked?: boolean;
-        };
-      };
-      profiles: {
-        Row: {
-          id: string;
-          username: string;
-          avatar_url: string;
-        };
-      };
-    };
-  };
-}
+import SignInModal from '@/components/SignInModal';
+import Image from 'next/image';
 
 interface BlogPost {
   id: string;
   title: string;
   content: string;
+  excerpt?: string;
   cover_image: string;
   author_id: string;
   tags: string[];
@@ -59,6 +27,7 @@ interface BlogPost {
   _count: {
     likes: number;
     bookmarks: number;
+    views: number;
   };
   is_bookmarked?: boolean;
   is_liked?: boolean;
@@ -72,15 +41,20 @@ export default function BlogPostPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [user, setUser] = React.useState<User | null>(null);
+  const [isSignInModalOpen, setIsSignInModalOpen] = React.useState(false);
 
   // Fetch user
   React.useEffect(() => {
     const getUser = async () => {
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (!error && user) {
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error) throw error;
         setUser(user);
+      } catch (err) {
+        console.error('Error getting user:', err);
       }
     };
+
     getUser();
   }, [supabase]);
 
@@ -101,15 +75,7 @@ export default function BlogPostPage() {
         // First, fetch the basic post data
         const { data: basicPost, error: basicPostError } = await supabase
           .from('blogs')
-          .select(`
-            *,
-            author:profiles!blogs_author_id_fkey (
-              id,
-              username,
-              avatar_url
-            ),
-            bookmarks (count)
-          `)
+          .select('*')
           .eq('id', params.id)
           .single();
 
@@ -126,158 +92,344 @@ export default function BlogPostPage() {
           return;
         }
 
-        postData = basicPost;
+        // Fetch author profile
+        const { data: authorProfile, error: authorError } = await supabase
+          .from('profiles')
+          .select('id, username, avatar_url')
+          .eq('id', basicPost.author_id)
+          .single();
+
+        if (authorError) {
+          console.error('Error fetching author profile:', authorError);
+          throw authorError;
+        }
+
+        // Count views, likes, and bookmarks
+        const [viewsCount, likesCount, bookmarksCount] = await Promise.all([
+          supabase.from('blog_views').select('id', { count: 'exact' }).eq('blog_id', params.id),
+          supabase.from('blog_likes').select('id', { count: 'exact' }).eq('blog_id', params.id),
+          supabase.from('blog_bookmarks').select('id', { count: 'exact' }).eq('blog_id', params.id)
+        ]);
+
+        postData = {
+          ...basicPost,
+          author: {
+            id: authorProfile.id,
+            username: authorProfile.username || 'Unknown',
+            avatar_url: authorProfile.avatar_url || '/default-avatar.png'
+          },
+          _count: {
+            views: viewsCount.count || 0,
+            likes: likesCount.count || 0,
+            bookmarks: bookmarksCount.count || 0
+          }
+        };
 
         // If user is logged in, check if they've bookmarked and liked the post
         if (userData.user) {
           // Check bookmarks
           const { data: bookmarkData } = await supabase
-            .from('bookmarks')
+            .from('blog_bookmarks')
             .select('id')
             .eq('blog_id', params.id)
             .eq('user_id', userData.user.id)
             .single();
 
-          // Check likes - handle case where table might not exist yet
-          let likeData = null;
-          try {
-            const { data } = await supabase
-              .from('likes')
-              .select('id')
-              .eq('blog_id', params.id)
-              .eq('user_id', userData.user.id)
-              .single();
-            likeData = data;
-          } catch (error) {
-            console.log('Error checking likes (table might not exist yet):', error);
-          }
+          // Check likes
+          const { data: likeData } = await supabase
+            .from('blog_likes')
+            .select('id')
+            .eq('blog_id', params.id)
+            .eq('user_id', userData.user.id)
+            .single();
 
           postData = {
-            ...basicPost,
+            ...postData,
             is_bookmarked: !!bookmarkData,
             is_liked: !!likeData
           };
         }
 
-        // Get likes count - handle case where table might not exist yet
-        let likesCount = 0;
-        try {
-          const { count } = await supabase
-            .from('likes')
-            .select('*', { count: 'exact', head: true })
-            .eq('blog_id', params.id);
-          likesCount = count || 0;
-        } catch (error) {
-          console.log('Error getting likes count (table might not exist yet):', error);
-        }
-
         console.log('Post data:', postData);
-
-        // Transform the data
-        const rawPost = postData as unknown as Database['public']['Tables']['blogs']['Row'];
-        const transformedPost: BlogPost = {
-          id: rawPost.id,
-          title: rawPost.title,
-          content: rawPost.content,
-          cover_image: rawPost.cover_image || '',
-          author_id: rawPost.author_id,
-          tags: rawPost.tags || [],
-          created_at: rawPost.created_at,
-          author: {
-            id: rawPost.author?.id || rawPost.author_id,
-            username: rawPost.author?.username || 'Unknown',
-            avatar_url: rawPost.author?.avatar_url || '/default-avatar.png'
-          },
-          _count: {
-            likes: likesCount,
-            bookmarks: rawPost.bookmarks?.[0]?.count || 0
-          },
-          is_bookmarked: !!rawPost.is_bookmarked,
-          is_liked: !!rawPost.is_liked
-        };
-
-        console.log('Transformed post:', transformedPost);
-        setPost(transformedPost);
+        setPost(postData as BlogPost);
       } catch (error) {
         console.error('Error details:', error);
-        if (error instanceof Error) {
-          console.error('Error message:', error.message);
-          console.error('Error stack:', error.stack);
-          if (typeof error === 'object' && error !== null) {
-            const err = error as { code?: string; details?: string; hint?: string };
-            if (err.code) {
-              console.error('Error code:', err.code);
-            }
-            if (err.details) {
-              console.error('Error details:', err.details);
-            }
-            if (err.hint) {
-              console.error('Error hint:', err.hint);
-            }
-          }
-        }
         setError(error instanceof Error ? error.message : 'Failed to load blog post');
       } finally {
         setLoading(false);
       }
     };
 
-    if (params.id) {
-      fetchData();
-    }
-  }, [supabase, params.id, router]);
+    fetchData();
+  }, [supabase, params.id, router, user]);
 
-  const handleToggleBookmark = async () => {
-    if (!user || !post) return;
+  const handleLike = async () => {
+    if (!user || !post) {
+      setIsSignInModalOpen(true);
+      return;
+    }
 
     try {
-      const { data: isBookmarked, error } = await supabase.rpc('toggle_bookmark', {
-        blog_id_input: post.id,
-        user_id_input: user.id
-      });
+      if (post.is_liked) {
+        // Remove like
+        await supabase
+          .from('blog_likes')
+          .delete()
+          .eq('blog_id', post.id)
+          .eq('user_id', user.id);
+      } else {
+        // Add like
+        await supabase
+          .from('blog_likes')
+          .insert({
+            blog_id: post.id,
+            user_id: user.id
+          });
+      }
 
-      if (error) throw error;
+      // Refetch post data
+      const fetchData = async () => {
+        try {
+          setLoading(true);
+          setError(null);
 
-      setPost(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          is_bookmarked: isBookmarked,
-          _count: {
-            ...prev._count,
-            bookmarks: prev._count.bookmarks + (isBookmarked ? 1 : -1)
+          // Fetch post with author info, counts, and bookmark status
+          const { data: userData } = await supabase.auth.getUser();
+          let postData = null;
+
+          console.log('Fetching post with ID:', params.id);
+          console.log('Current user:', userData?.user?.id);
+
+          // First, fetch the basic post data
+          const { data: basicPost, error: basicPostError } = await supabase
+            .from('blogs')
+            .select('*')
+            .eq('id', params.id)
+            .single();
+
+          console.log('Basic post query result:', { data: basicPost, error: basicPostError });
+
+          if (basicPostError) {
+            console.error('Error fetching basic post:', basicPostError);
+            throw basicPostError;
           }
-        };
-      });
+
+          if (!basicPost) {
+            console.log('Post not found, redirecting to blog page');
+            router.push('/blog');
+            return;
+          }
+
+          // Fetch author profile
+          const { data: authorProfile, error: authorError } = await supabase
+            .from('profiles')
+            .select('id, username, avatar_url')
+            .eq('id', basicPost.author_id)
+            .single();
+
+          if (authorError) {
+            console.error('Error fetching author profile:', authorError);
+            throw authorError;
+          }
+
+          // Count views, likes, and bookmarks
+          const [viewsCount, likesCount, bookmarksCount] = await Promise.all([
+            supabase.from('blog_views').select('id', { count: 'exact' }).eq('blog_id', params.id),
+            supabase.from('blog_likes').select('id', { count: 'exact' }).eq('blog_id', params.id),
+            supabase.from('blog_bookmarks').select('id', { count: 'exact' }).eq('blog_id', params.id)
+          ]);
+
+          postData = {
+            ...basicPost,
+            author: {
+              id: authorProfile.id,
+              username: authorProfile.username || 'Unknown',
+              avatar_url: authorProfile.avatar_url || '/default-avatar.png'
+            },
+            _count: {
+              views: viewsCount.count || 0,
+              likes: likesCount.count || 0,
+              bookmarks: bookmarksCount.count || 0
+            }
+          };
+
+          // If user is logged in, check if they've bookmarked and liked the post
+          if (userData.user) {
+            // Check bookmarks
+            const { data: bookmarkData } = await supabase
+              .from('blog_bookmarks')
+              .select('id')
+              .eq('blog_id', params.id)
+              .eq('user_id', userData.user.id)
+              .single();
+
+            // Check likes
+            const { data: likeData } = await supabase
+              .from('blog_likes')
+              .select('id')
+              .eq('blog_id', params.id)
+              .eq('user_id', userData.user.id)
+              .single();
+
+            postData = {
+              ...postData,
+              is_bookmarked: !!bookmarkData,
+              is_liked: !!likeData
+            };
+          }
+
+          console.log('Post data:', postData);
+          setPost(postData as BlogPost);
+        } catch (error) {
+          console.error('Error details:', {
+            error,
+            message: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+            name: error instanceof Error ? error.name : undefined
+          });
+          setError(error instanceof Error ? error.message : 'Failed to load blog post');
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchData();
     } catch (error) {
-      console.error('Error toggling bookmark:', error);
+      console.error('Error toggling like:', error);
     }
   };
 
-  const handleToggleLike = async () => {
-    if (!user || !post) return;
+  const handleBookmark = async () => {
+    if (!user || !post) {
+      setIsSignInModalOpen(true);
+      return;
+    }
 
     try {
-      const { data: isLiked, error } = await supabase.rpc('toggle_like', {
-        blog_id_input: post.id,
-        user_id_input: user.id
-      });
+      if (post.is_bookmarked) {
+        // Remove bookmark
+        await supabase
+          .from('blog_bookmarks')
+          .delete()
+          .eq('blog_id', post.id)
+          .eq('user_id', user.id);
+      } else {
+        // Add bookmark
+        await supabase
+          .from('blog_bookmarks')
+          .insert({
+            blog_id: post.id,
+            user_id: user.id
+          });
+      }
 
-      if (error) throw error;
+      // Refetch post data
+      const fetchData = async () => {
+        try {
+          setLoading(true);
+          setError(null);
 
-      setPost(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          is_liked: isLiked,
-          _count: {
-            ...prev._count,
-            likes: prev._count.likes + (isLiked ? 1 : -1)
+          // Fetch post with author info, counts, and bookmark status
+          const { data: userData } = await supabase.auth.getUser();
+          let postData = null;
+
+          console.log('Fetching post with ID:', params.id);
+          console.log('Current user:', userData?.user?.id);
+
+          // First, fetch the basic post data
+          const { data: basicPost, error: basicPostError } = await supabase
+            .from('blogs')
+            .select('*')
+            .eq('id', params.id)
+            .single();
+
+          console.log('Basic post query result:', { data: basicPost, error: basicPostError });
+
+          if (basicPostError) {
+            console.error('Error fetching basic post:', basicPostError);
+            throw basicPostError;
           }
-        };
-      });
+
+          if (!basicPost) {
+            console.log('Post not found, redirecting to blog page');
+            router.push('/blog');
+            return;
+          }
+
+          // Fetch author profile
+          const { data: authorProfile, error: authorError } = await supabase
+            .from('profiles')
+            .select('id, username, avatar_url')
+            .eq('id', basicPost.author_id)
+            .single();
+
+          if (authorError) {
+            console.error('Error fetching author profile:', authorError);
+            throw authorError;
+          }
+
+          // Count views, likes, and bookmarks
+          const [viewsCount, likesCount, bookmarksCount] = await Promise.all([
+            supabase.from('blog_views').select('id', { count: 'exact' }).eq('blog_id', params.id),
+            supabase.from('blog_likes').select('id', { count: 'exact' }).eq('blog_id', params.id),
+            supabase.from('blog_bookmarks').select('id', { count: 'exact' }).eq('blog_id', params.id)
+          ]);
+
+          postData = {
+            ...basicPost,
+            author: {
+              id: authorProfile.id,
+              username: authorProfile.username || 'Unknown',
+              avatar_url: authorProfile.avatar_url || '/default-avatar.png'
+            },
+            _count: {
+              views: viewsCount.count || 0,
+              likes: likesCount.count || 0,
+              bookmarks: bookmarksCount.count || 0
+            }
+          };
+
+          // If user is logged in, check if they've bookmarked and liked the post
+          if (userData.user) {
+            // Check bookmarks
+            const { data: bookmarkData } = await supabase
+              .from('blog_bookmarks')
+              .select('id')
+              .eq('blog_id', params.id)
+              .eq('user_id', userData.user.id)
+              .single();
+
+            // Check likes
+            const { data: likeData } = await supabase
+              .from('blog_likes')
+              .select('id')
+              .eq('blog_id', params.id)
+              .eq('user_id', userData.user.id)
+              .single();
+
+            postData = {
+              ...postData,
+              is_bookmarked: !!bookmarkData,
+              is_liked: !!likeData
+            };
+          }
+
+          console.log('Post data:', postData);
+          setPost(postData as BlogPost);
+        } catch (error) {
+          console.error('Error details:', {
+            error,
+            message: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+            name: error instanceof Error ? error.name : undefined
+          });
+          setError(error instanceof Error ? error.message : 'Failed to load blog post');
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchData();
     } catch (error) {
-      console.error('Error toggling like:', error);
+      console.error('Error toggling bookmark:', error);
     }
   };
 
@@ -319,6 +471,7 @@ export default function BlogPostPage() {
 
   return (
     <div className="min-h-screen p-4 md:p-8">
+      <SignInModal isOpen={isSignInModalOpen} onClose={() => setIsSignInModalOpen(false)} />
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -359,6 +512,7 @@ export default function BlogPostPage() {
                     alt={post.author.username}
                     fill
                     className="rounded-full object-cover"
+                    sizes="32px"
                   />
                 </div>
                 <span className="text-zinc-400">{post.author.username}</span>
@@ -377,7 +531,7 @@ export default function BlogPostPage() {
               {user && (
                 <>
                   <button
-                    onClick={handleToggleLike}
+                    onClick={handleLike}
                     className={`flex items-center space-x-1 transition-colors ${
                       post.is_liked
                         ? 'text-purple-500 hover:text-purple-400'
@@ -390,7 +544,7 @@ export default function BlogPostPage() {
                     <span>{post._count.likes}</span>
                   </button>
                   <button
-                    onClick={handleToggleBookmark}
+                    onClick={handleBookmark}
                     className={`flex items-center space-x-1 transition-colors ${
                       post.is_bookmarked
                         ? 'text-purple-500 hover:text-purple-400'

@@ -11,11 +11,21 @@ import Link from '@tiptap/extension-link';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Placeholder from '@tiptap/extension-placeholder';
 import TextAlign from '@tiptap/extension-text-align';
+import Table from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableCell from '@tiptap/extension-table-cell';
+import TableHeader from '@tiptap/extension-table-header';
+import TaskList from '@tiptap/extension-task-list';
+import TaskItem from '@tiptap/extension-task-item';
+import Highlight from '@tiptap/extension-highlight';
+import Typography from '@tiptap/extension-typography';
+import Subscript from '@tiptap/extension-subscript';
+import Superscript from '@tiptap/extension-superscript';
+import Underline from '@tiptap/extension-underline';
 import { common, createLowlight } from 'lowlight'
 import type { EditorView } from 'prosemirror-view';
 import {
   Hash,
-  Image as ImageIcon,
   Link as LinkIcon,
   Bold,
   Italic,
@@ -33,9 +43,13 @@ import {
   AlignCenter,
   AlignRight,
   Strikethrough,
-  ImagePlus
+  Table as TableIcon,
+  CheckSquare,
+  Highlighter,
+  Subscript as SubscriptIcon,
+  Superscript as SuperscriptIcon,
+  Underline as UnderlineIcon,
 } from 'lucide-react';
-import NextImage from 'next/image';
 
 interface User {
   id: string;
@@ -47,6 +61,23 @@ interface User {
   };
 }
 
+// Add Tooltip component
+interface TooltipProps {
+  children: React.ReactNode;
+  content: string;
+}
+
+function Tooltip({ children, content }: TooltipProps) {
+  return (
+    <div className="relative group">
+      {children}
+      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-zinc-800 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+        {content}
+      </div>
+    </div>
+  );
+}
+
 export default function NewBlogPage() {
   const supabase = createClientComponentClient();
   const router = useRouter();
@@ -54,8 +85,6 @@ export default function NewBlogPage() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [title, setTitle] = React.useState('');
-  const [coverImage, setCoverImage] = React.useState<File | null>(null);
-  const [coverImagePreview, setCoverImagePreview] = React.useState<string | null>(null);
   const [tags, setTags] = React.useState<string[]>([]);
   const [currentTag, setCurrentTag] = React.useState('');
 
@@ -87,6 +116,26 @@ export default function NewBlogPage() {
         types: ['heading', 'paragraph'],
         alignments: ['left', 'center', 'right'],
       }),
+      Table.configure({
+        resizable: true,
+        HTMLAttributes: {
+          class: 'border-collapse table-auto w-full',
+        },
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
+      TaskList,
+      TaskItem.configure({
+        nested: true,
+      }),
+      Highlight.configure({
+        multicolor: true,
+      }),
+      Typography,
+      Subscript,
+      Superscript,
+      Underline,
       Placeholder.configure({
         placeholder: 'Write your story...',
       }),
@@ -94,7 +143,7 @@ export default function NewBlogPage() {
     content: '',
     editorProps: {
       attributes: {
-        class: 'prose prose-invert prose-lg max-w-none focus:outline-none',
+        class: 'prose prose-invert prose-lg max-w-none focus:outline-none min-h-[400px]',
       },
       handleDrop: (view, event, slice, moved) => {
         if (!moved && event.dataTransfer?.files.length) {
@@ -132,29 +181,6 @@ export default function NewBlogPage() {
 
     checkUser();
   }, [supabase, router]);
-
-  const handleCoverImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      setError('Please upload an image file');
-      return;
-    }
-
-    const maxSize = 5 * 1024 * 1024; // 5MB
-    if (file.size > maxSize) {
-      setError('Image must be less than 5MB');
-      return;
-    }
-
-    setCoverImage(file);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setCoverImagePreview(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
 
   const handleTagKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && currentTag.trim()) {
@@ -213,13 +239,6 @@ export default function NewBlogPage() {
     }
   };
 
-  const addImageFromInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      await handleImageUpload(file);
-    }
-  };
-
   const handlePublish = async () => {
     if (!user || !editor) return;
 
@@ -269,58 +288,6 @@ export default function NewBlogPage() {
         }
       }
 
-      let coverImageUrl = '';
-      if (coverImage) {
-        try {
-          // Validate MIME type
-          const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-          if (!validTypes.includes(coverImage.type)) {
-            setError('Please upload a valid image file (JPEG, PNG, WebP, or GIF)');
-            return;
-          }
-
-          // Upload cover image to Supabase Storage
-          const fileExt = coverImage.name.split('.').pop();
-          const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-          const filePath = `${fileName}`;
-
-          const { error: uploadError, data: uploadData } = await supabase.storage
-            .from('blog-covers')
-            .upload(filePath, coverImage, {
-              cacheControl: '3600',
-              upsert: false,
-              contentType: coverImage.type
-            });
-
-          if (uploadError) {
-            console.error('Storage upload error:', uploadError);
-            setError(uploadError.message || 'Failed to upload cover image. Please try again.');
-            return;
-          }
-
-          if (!uploadData?.path) {
-            setError('Failed to get upload path. Please try again.');
-            return;
-          }
-
-          // Get public URL
-          const { data: { publicUrl } } = supabase.storage
-            .from('blog-covers')
-            .getPublicUrl(uploadData.path);
-
-          if (!publicUrl) {
-            setError('Failed to get public URL. Please try again.');
-            return;
-          }
-
-          coverImageUrl = publicUrl;
-        } catch (error) {
-          console.error('Cover image upload error:', error);
-          setError(error instanceof Error ? error.message : 'Failed to upload cover image');
-          return;
-        }
-      }
-
       // Create blog post
       const { error: insertError } = await supabase
         .from('blogs')
@@ -328,7 +295,6 @@ export default function NewBlogPage() {
           title,
           content: editor.getHTML(),
           excerpt: editor.getText().slice(0, 200) + '...',
-          cover_image: coverImageUrl,
           author_id: user.id,
           tags: tags.length > 0 ? tags : [],
         });
@@ -371,38 +337,6 @@ export default function NewBlogPage() {
           </motion.div>
         )}
 
-        {/* Cover Image Upload */}
-        <div className="relative">
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleCoverImageChange}
-            className="hidden"
-            id="cover-image"
-          />
-          <label
-            htmlFor="cover-image"
-            className={`block w-full aspect-video rounded-xl overflow-hidden cursor-pointer ${
-              coverImagePreview ? '' : 'bg-zinc-900'
-            }`}
-          >
-            {coverImagePreview ? (
-              <NextImage
-                src={coverImagePreview}
-                alt="Cover preview"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center space-y-2">
-                  <ImageIcon className="w-8 h-8 mx-auto text-zinc-400" />
-                  <span className="text-zinc-400">Add a cover image</span>
-                </div>
-              </div>
-            )}
-          </label>
-        </div>
-
         {/* Title Input */}
         <input
           type="text"
@@ -443,187 +377,279 @@ export default function NewBlogPage() {
         {/* Enhanced Editor Toolbar */}
         <div className="flex flex-wrap items-center gap-2 border-b border-zinc-800 pb-4">
           <div className="flex items-center space-x-1 bg-zinc-900 rounded-lg p-1">
-            <button
-              onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
-              className={`p-2 rounded hover:bg-zinc-800 ${
-                editor?.isActive('heading', { level: 1 }) ? 'bg-zinc-800' : ''
-              }`}
-              aria-label="Heading 1"
-            >
-              <Heading1 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-              className={`p-2 rounded hover:bg-zinc-800 ${
-                editor?.isActive('heading', { level: 2 }) ? 'bg-zinc-800' : ''
-              }`}
-              aria-label="Heading 2"
-            >
-              <Heading2 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
-              className={`p-2 rounded hover:bg-zinc-800 ${
-                editor?.isActive('heading', { level: 3 }) ? 'bg-zinc-800' : ''
-              }`}
-              aria-label="Heading 3"
-            >
-              <Heading3 className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="flex items-center space-x-1 bg-zinc-900 rounded-lg p-1">
-            <button
-              onClick={() => editor?.chain().focus().toggleBold().run()}
-              className={`p-2 rounded hover:bg-zinc-800 ${
-                editor?.isActive('bold') ? 'bg-zinc-800' : ''
-              }`}
-              aria-label="Bold"
-            >
-              <Bold className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor?.chain().focus().toggleItalic().run()}
-              className={`p-2 rounded hover:bg-zinc-800 ${
-                editor?.isActive('italic') ? 'bg-zinc-800' : ''
-              }`}
-              aria-label="Italic"
-            >
-              <Italic className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor?.chain().focus().toggleStrike().run()}
-              className={`p-2 rounded hover:bg-zinc-800 ${
-                editor?.isActive('strike') ? 'bg-zinc-800' : ''
-              }`}
-              aria-label="Strikethrough"
-            >
-              <Strikethrough className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="flex items-center space-x-1 bg-zinc-900 rounded-lg p-1">
-            <button
-              onClick={() => editor?.chain().focus().setTextAlign('left').run()}
-              className={`p-2 rounded hover:bg-zinc-800 ${
-                editor?.isActive({ textAlign: 'left' }) ? 'bg-zinc-800' : ''
-              }`}
-              aria-label="Align left"
-            >
-              <AlignLeft className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor?.chain().focus().setTextAlign('center').run()}
-              className={`p-2 rounded hover:bg-zinc-800 ${
-                editor?.isActive({ textAlign: 'center' }) ? 'bg-zinc-800' : ''
-              }`}
-              aria-label="Align center"
-            >
-              <AlignCenter className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor?.chain().focus().setTextAlign('right').run()}
-              className={`p-2 rounded hover:bg-zinc-800 ${
-                editor?.isActive({ textAlign: 'right' }) ? 'bg-zinc-800' : ''
-              }`}
-              aria-label="Align right"
-            >
-              <AlignRight className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="flex items-center space-x-1 bg-zinc-900 rounded-lg p-1">
-            <button
-              onClick={() => editor?.chain().focus().toggleBulletList().run()}
-              className={`p-2 rounded hover:bg-zinc-800 ${
-                editor?.isActive('bulletList') ? 'bg-zinc-800' : ''
-              }`}
-              aria-label="Bullet list"
-            >
-              <List className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-              className={`p-2 rounded hover:bg-zinc-800 ${
-                editor?.isActive('orderedList') ? 'bg-zinc-800' : ''
-              }`}
-              aria-label="Numbered list"
-            >
-              <ListOrdered className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor?.chain().focus().toggleBlockquote().run()}
-              className={`p-2 rounded hover:bg-zinc-800 ${
-                editor?.isActive('blockquote') ? 'bg-zinc-800' : ''
-              }`}
-              aria-label="Quote"
-            >
-              <Quote className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="flex items-center space-x-1 bg-zinc-900 rounded-lg p-1">
-            <button
-              onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
-              className={`p-2 rounded hover:bg-zinc-800 ${
-                editor?.isActive('codeBlock') ? 'bg-zinc-800' : ''
-              }`}
-              aria-label="Code block"
-            >
-              <Code className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => {
-                const url = window.prompt('Enter the URL');
-                if (url) {
-                  editor?.chain().focus().setLink({ href: url }).run();
-                }
-              }}
-              className={`p-2 rounded hover:bg-zinc-800 ${
-                editor?.isActive('link') ? 'bg-zinc-800' : ''
-              }`}
-              aria-label="Add link"
-            >
-              <LinkIcon className="w-4 h-4" />
-            </button>
-            <div className="relative">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={addImageFromInput}
-                className="hidden"
-                id="editor-image"
-              />
-              <label
-                htmlFor="editor-image"
-                className="p-2 rounded hover:bg-zinc-800 cursor-pointer inline-block"
-                aria-label="Add image"
+            <Tooltip content="Heading 1">
+              <button
+                onClick={() => editor?.chain().focus().setHeading({ level: 1 }).run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('heading', { level: 1 }) ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Heading 1"
               >
-                <ImagePlus className="w-4 h-4" />
-              </label>
-            </div>
+                <Heading1 className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Heading 2">
+              <button
+                onClick={() => editor?.chain().focus().setHeading({ level: 2 }).run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('heading', { level: 2 }) ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Heading 2"
+              >
+                <Heading2 className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Heading 3">
+              <button
+                onClick={() => editor?.chain().focus().setHeading({ level: 3 }).run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('heading', { level: 3 }) ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Heading 3"
+              >
+                <Heading3 className="w-4 h-4" />
+              </button>
+            </Tooltip>
           </div>
 
           <div className="flex items-center space-x-1 bg-zinc-900 rounded-lg p-1">
-            <button
-              onClick={() => editor?.chain().focus().undo().run()}
-              className="p-2 rounded hover:bg-zinc-800"
-              aria-label="Undo"
-            >
-              <Undo className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor?.chain().focus().redo().run()}
-              className="p-2 rounded hover:bg-zinc-800"
-              aria-label="Redo"
-            >
-              <Redo className="w-4 h-4" />
-            </button>
+            <Tooltip content="Bold">
+              <button
+                onClick={() => editor?.chain().focus().toggleBold().run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('bold') ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Bold"
+              >
+                <Bold className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Italic">
+              <button
+                onClick={() => editor?.chain().focus().toggleItalic().run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('italic') ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Italic"
+              >
+                <Italic className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Underline">
+              <button
+                onClick={() => editor?.chain().focus().toggleUnderline().run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('underline') ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Underline"
+              >
+                <UnderlineIcon className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Strikethrough">
+              <button
+                onClick={() => editor?.chain().focus().toggleStrike().run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('strike') ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Strikethrough"
+              >
+                <Strikethrough className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          </div>
+
+          <div className="flex items-center space-x-1 bg-zinc-900 rounded-lg p-1">
+            <Tooltip content="Highlight">
+              <button
+                onClick={() => editor?.chain().focus().toggleHighlight().run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('highlight') ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Highlight"
+              >
+                <Highlighter className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Subscript">
+              <button
+                onClick={() => editor?.chain().focus().toggleSubscript().run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('subscript') ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Subscript"
+              >
+                <SubscriptIcon className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Superscript">
+              <button
+                onClick={() => editor?.chain().focus().toggleSuperscript().run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('superscript') ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Superscript"
+              >
+                <SuperscriptIcon className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          </div>
+
+          <div className="flex items-center space-x-1 bg-zinc-900 rounded-lg p-1">
+            <Tooltip content="Align Left">
+              <button
+                onClick={() => editor?.chain().focus().setTextAlign('left').run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive({ textAlign: 'left' }) ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Align left"
+              >
+                <AlignLeft className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Align Center">
+              <button
+                onClick={() => editor?.chain().focus().setTextAlign('center').run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive({ textAlign: 'center' }) ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Align center"
+              >
+                <AlignCenter className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Align Right">
+              <button
+                onClick={() => editor?.chain().focus().setTextAlign('right').run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive({ textAlign: 'right' }) ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Align right"
+              >
+                <AlignRight className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          </div>
+
+          <div className="flex items-center space-x-1 bg-zinc-900 rounded-lg p-1">
+            <Tooltip content="Bullet List">
+              <button
+                onClick={() => editor?.chain().focus().toggleBulletList().run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('bulletList') ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Bullet list"
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Numbered List">
+              <button
+                onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('orderedList') ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Numbered list"
+              >
+                <ListOrdered className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Task List">
+              <button
+                onClick={() => editor?.chain().focus().toggleTaskList().run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('taskList') ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Task list"
+              >
+                <CheckSquare className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Quote">
+              <button
+                onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('blockquote') ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Quote"
+              >
+                <Quote className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          </div>
+
+          <div className="flex items-center space-x-1 bg-zinc-900 rounded-lg p-1">
+            <Tooltip content="Code Block">
+              <button
+                onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('codeBlock') ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Code block"
+              >
+                <Code className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Add Link">
+              <button
+                onClick={() => {
+                  const url = window.prompt('Enter the URL');
+                  if (url) {
+                    editor?.chain().focus().setLink({ href: url }).run();
+                  }
+                }}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('link') ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Add link"
+              >
+                <LinkIcon className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Insert Table">
+              <button
+                onClick={() => {
+                  const rows = parseInt(window.prompt('Number of rows', '3') || '3');
+                  const cols = parseInt(window.prompt('Number of columns', '3') || '3');
+                  editor?.chain().focus().insertTable({ rows, cols }).run();
+                }}
+                className={`p-2 rounded hover:bg-zinc-800 ${
+                  editor?.isActive('table') ? 'bg-zinc-800' : ''
+                }`}
+                aria-label="Insert table"
+              >
+                <TableIcon className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          </div>
+
+          <div className="flex items-center space-x-1 bg-zinc-900 rounded-lg p-1">
+            <Tooltip content="Undo">
+              <button
+                onClick={() => editor?.chain().focus().undo().run()}
+                className="p-2 rounded hover:bg-zinc-800"
+                aria-label="Undo"
+              >
+                <Undo className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Redo">
+              <button
+                onClick={() => editor?.chain().focus().redo().run()}
+                className="p-2 rounded hover:bg-zinc-800"
+                aria-label="Redo"
+              >
+                <Redo className="w-4 h-4" />
+              </button>
+            </Tooltip>
           </div>
         </div>
 
         {/* Editor Content */}
-        <EditorContent editor={editor} className="min-h-[400px] prose-pre:p-0" />
+        <EditorContent 
+          editor={editor} 
+          className="min-h-[400px] prose-pre:p-0 p-4 rounded-lg border border-zinc-800 bg-zinc-900/50 focus-within:border-purple-500/50 transition-colors"
+        />
 
         {/* Publish Button */}
         <div className="flex justify-end space-x-4">

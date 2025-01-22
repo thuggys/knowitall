@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, Share2, ExternalLink, Tag } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
 
 interface Article {
   id: string;
@@ -208,11 +209,15 @@ export default function ArticlePage() {
         <header className="space-y-4">
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
-              <img
-                src={article.source.image}
-                alt={`${article.source.name} logo`}
-                className="w-6 h-6 rounded-full"
-              />
+              <div className="relative w-6 h-6">
+                <Image
+                  src={article.source.image}
+                  alt={`${article.source.name} logo`}
+                  fill
+                  className="rounded-full object-cover"
+                  sizes="24px"
+                />
+              </div>
               <span className="text-sm text-zinc-400">{article.source.name}</span>
             </div>
             <span className="text-zinc-600">•</span>
@@ -241,10 +246,12 @@ export default function ArticlePage() {
         {/* Article Image */}
         {article.image && (
           <div className="relative aspect-video rounded-xl overflow-hidden">
-            <img
+            <Image
               src={article.image}
               alt={`Featured image for ${article.title}`}
-              className="w-full h-full object-cover"
+              fill
+              className="object-cover"
+              priority
             />
           </div>
         )}
@@ -279,18 +286,24 @@ export default function ArticlePage() {
                   className="group"
                 >
                   <div className="relative h-40 rounded-lg overflow-hidden mb-4">
-                    <img
+                    <Image
                       src={related.image}
                       alt={`Featured image for ${related.title}`}
-                      className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                      fill
+                      className="object-cover transition-transform group-hover:scale-105"
+                      sizes="(max-width: 768px) 100vw, 33vw"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                     <div className="absolute bottom-4 left-4 right-4 flex items-center space-x-2">
-                      <img
-                        src={related.source.image}
-                        alt={`${related.source.name} logo`}
-                        className="w-5 h-5 rounded-full"
-                      />
+                      <div className="relative w-5 h-5">
+                        <Image
+                          src={related.source.image}
+                          alt={`${related.source.name} logo`}
+                          fill
+                          className="rounded-full object-cover"
+                          sizes="20px"
+                        />
+                      </div>
                       <span className="text-sm text-white/80">{related.source.name}</span>
                     </div>
                   </div>

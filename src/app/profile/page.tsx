@@ -30,16 +30,27 @@ interface LikedPost {
   };
 }
 
-interface SupabaseLike {
-  blogs: {
-    id: string;
-    title: string;
-    created_at: string;
-    profiles: {
-      username: string;
-      avatar_url: string;
-    } | null;
-  }
+interface Bookmark {
+  id: string;
+  title: string;
+  excerpt: string;
+  cover_image: string;
+  author: {
+    username: string;
+    avatar_url: string;
+  };
+  created_at: string;
+}
+
+interface LearningBookmark {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  category: string;
+  type: string;
+  tags: string[];
+  created_at: string;
 }
 
 export default function ProfilePage() {
@@ -48,11 +59,14 @@ export default function ProfilePage() {
   const [user, setUser] = React.useState<User | null>(null);
   const [profile, setProfile] = React.useState<Profile | null>(null);
   const [likedPosts, setLikedPosts] = React.useState<LikedPost[]>([]);
+  const [bookmarks, setBookmarks] = React.useState<Bookmark[]>([]);
+  const [learningBookmarks, setLearningBookmarks] = React.useState<LearningBookmark[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [updating, setUpdating] = React.useState(false);
   const [editMode, setEditMode] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState<'likes' | 'bookmarks' | 'learning'>('likes');
 
   // Form state
   const [formData, setFormData] = React.useState({
@@ -139,51 +153,175 @@ export default function ProfilePage() {
     getUser();
   }, [supabase]);
 
-  // Add this new useEffect to fetch liked posts
+  // Update the liked posts fetch
   React.useEffect(() => {
     const fetchLikedPosts = async () => {
       if (!user) return;
 
       try {
-        const { data, error } = await supabase
-          .from('likes')
+        // First get the liked blog IDs
+        const { data: likedBlogIds, error: likesError } = await supabase
+          .from('blog_likes')
+          .select('blog_id')
+          .eq('user_id', user.id);
+
+        if (likesError) throw likesError;
+
+        if (!likedBlogIds?.length) {
+          setLikedPosts([]);
+          return;
+        }
+
+        // Then fetch the blog details
+        const { data: blogsData, error: blogsError } = await supabase
+          .from('blogs')
           .select(`
-            blogs (
-              id,
-              title,
-              created_at,
-              profiles!blogs_author_id_fkey (
-                username,
-                avatar_url
-              )
-            )
+            id,
+            title,
+            created_at,
+            author_id
           `)
+          .in('id', likedBlogIds.map(like => like.blog_id));
+
+        if (blogsError) throw blogsError;
+
+        // Fetch author profiles
+        const authorIds = [...new Set((blogsData || []).map(blog => blog.author_id))];
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, username, avatar_url')
+          .in('id', authorIds);
+
+        const profilesMap = new Map(profilesData?.map(profile => [profile.id, profile]) || []);
+
+        const transformedPosts: LikedPost[] = (blogsData || []).map(blog => {
+          const profile = profilesMap.get(blog.author_id);
+          return {
+            id: blog.id,
+            title: blog.title,
+            created_at: blog.created_at,
+            author: {
+              username: profile?.username || 'Unknown',
+              avatar_url: profile?.avatar_url || '/default-avatar.png'
+            }
+          };
+        });
+
+        setLikedPosts(transformedPosts);
+      } catch (error) {
+        console.error('Error fetching liked posts:', error);
+        if (error instanceof Error) {
+          console.error('Error details:', {
+            message: error.message,
+            stack: error.stack
+          });
+        }
+      }
+    };
+
+    fetchLikedPosts();
+  }, [supabase, user]);
+
+  // Update bookmarks fetch
+  React.useEffect(() => {
+    const fetchBookmarks = async () => {
+      if (!user) return;
+
+      try {
+        // First get the bookmarked blog IDs
+        const { data: bookmarkedBlogIds, error: bookmarksError } = await supabase
+          .from('blog_bookmarks')
+          .select('blog_id')
+          .eq('user_id', user.id);
+
+        if (bookmarksError) throw bookmarksError;
+
+        if (!bookmarkedBlogIds?.length) {
+          setBookmarks([]);
+          return;
+        }
+
+        // Then fetch the blog details
+        const { data: blogsData, error: blogsError } = await supabase
+          .from('blogs')
+          .select(`
+            id,
+            title,
+            excerpt,
+            cover_image,
+            created_at,
+            author_id
+          `)
+          .in('id', bookmarkedBlogIds.map(bookmark => bookmark.blog_id));
+
+        if (blogsError) throw blogsError;
+
+        // Fetch author profiles
+        const authorIds = [...new Set((blogsData || []).map(blog => blog.author_id))];
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, username, avatar_url')
+          .in('id', authorIds);
+
+        const profilesMap = new Map(profilesData?.map(profile => [profile.id, profile]) || []);
+
+        const transformedBookmarks: Bookmark[] = (blogsData || []).map(blog => {
+          const profile = profilesMap.get(blog.author_id);
+          return {
+            id: blog.id,
+            title: blog.title,
+            excerpt: blog.excerpt || '',
+            cover_image: blog.cover_image || '',
+            created_at: blog.created_at,
+            author: {
+              username: profile?.username || 'Unknown',
+              avatar_url: profile?.avatar_url || '/default-avatar.png'
+            }
+          };
+        });
+
+        setBookmarks(transformedBookmarks);
+      } catch (error) {
+        console.error('Error fetching bookmarks:', error);
+        if (error instanceof Error) {
+          console.error('Error details:', {
+            message: error.message,
+            stack: error.stack
+          });
+        }
+      }
+    };
+
+    fetchBookmarks();
+  }, [supabase, user]);
+
+  // Add new effect for learning bookmarks
+  React.useEffect(() => {
+    const fetchLearningBookmarks = async () => {
+      if (!user) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('bookmarks')
+          .select('*')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
 
-        // Use type assertion through unknown first
-        const rawData = data as unknown as SupabaseLike[];
-        const transformedPosts: LikedPost[] = rawData
-          .filter(item => item.blogs) // Filter out any null blogs
-          .map(item => ({
-            id: item.blogs.id,
-            title: item.blogs.title,
-            created_at: item.blogs.created_at,
-            author: {
-              username: item.blogs.profiles?.username || 'Unknown',
-              avatar_url: item.blogs.profiles?.avatar_url || '/default-avatar.png'
-            }
-          }));
-
-        setLikedPosts(transformedPosts);
+        setLearningBookmarks(data || []);
       } catch (error) {
-        console.error('Error fetching liked posts:', error);
+        console.error('Error fetching learning bookmarks:', error);
+        if (error instanceof Error) {
+          console.error('Error details:', {
+            message: error.message,
+            stack: error.stack
+          });
+        }
       }
     };
 
-    fetchLikedPosts();
+    fetchLearningBookmarks();
   }, [supabase, user]);
 
   const handleSignOut = async () => {
@@ -504,42 +642,184 @@ export default function ProfilePage() {
 
           {/* Activity or Stats Section */}
           <div className="space-y-6">
-            <h2 className="text-xl font-semibold">Liked Posts</h2>
-            <div className="space-y-4">
-              {likedPosts.length === 0 ? (
-                <p className="text-zinc-400">No liked posts yet</p>
-              ) : (
-                likedPosts.map(post => (
-                  <motion.div
-                    key={post.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="p-4 bg-zinc-900 rounded-lg space-y-2"
-                  >
-                    <Link
-                      href={`/blog/${post.id}`}
-                      className="text-lg font-medium hover:text-purple-500 transition-colors"
-                    >
-                      {post.title}
-                    </Link>
-                    <div className="flex items-center space-x-2 text-sm text-zinc-400">
-                      <div className="relative w-5 h-5">
-                        <Image
-                          src={post.author.avatar_url}
-                          alt={post.author.username}
-                          fill
-                          sizes="20px"
-                          className="rounded-full object-cover"
-                        />
-                      </div>
-                      <span>{post.author.username}</span>
-                      <span>•</span>
-                      <span>{new Date(post.created_at).toLocaleDateString()}</span>
-                    </div>
-                  </motion.div>
-                ))
-              )}
+            <div className="flex space-x-4 border-b border-zinc-800">
+              <button
+                onClick={() => setActiveTab('likes')}
+                className={`pb-2 text-sm font-medium transition-colors ${
+                  activeTab === 'likes'
+                    ? 'text-purple-500 border-b-2 border-purple-500'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Liked Posts
+              </button>
+              <button
+                onClick={() => setActiveTab('bookmarks')}
+                className={`pb-2 text-sm font-medium transition-colors ${
+                  activeTab === 'bookmarks'
+                    ? 'text-purple-500 border-b-2 border-purple-500'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Blog Bookmarks
+              </button>
+              <button
+                onClick={() => setActiveTab('learning')}
+                className={`pb-2 text-sm font-medium transition-colors ${
+                  activeTab === 'learning'
+                    ? 'text-purple-500 border-b-2 border-purple-500'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Learning Bookmarks
+              </button>
             </div>
+
+            {activeTab === 'likes' ? (
+              <div className="space-y-4">
+                {likedPosts.length === 0 ? (
+                  <p className="text-zinc-400">No liked posts yet</p>
+                ) : (
+                  likedPosts.map(post => (
+                    <motion.div
+                      key={post.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="p-4 bg-zinc-900 rounded-lg space-y-2"
+                    >
+                      <Link
+                        href={`/blog/${post.id}`}
+                        className="text-lg font-medium hover:text-purple-500 transition-colors"
+                      >
+                        {post.title}
+                      </Link>
+                      <div className="flex items-center space-x-2 text-sm text-zinc-400">
+                        <div className="relative w-5 h-5">
+                          <Image
+                            src={post.author.avatar_url}
+                            alt={post.author.username}
+                            fill
+                            sizes="20px"
+                            className="rounded-full object-cover"
+                          />
+                        </div>
+                        <span>{post.author.username}</span>
+                        <span>•</span>
+                        <span>{new Date(post.created_at).toLocaleDateString()}</span>
+                      </div>
+                    </motion.div>
+                  ))
+                )}
+              </div>
+            ) : activeTab === 'bookmarks' ? (
+              <div className="space-y-4">
+                {bookmarks.length === 0 ? (
+                  <p className="text-zinc-400">No bookmarks yet</p>
+                ) : (
+                  bookmarks.map(bookmark => (
+                    <motion.div
+                      key={bookmark.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="p-4 bg-zinc-900 rounded-lg space-y-4"
+                    >
+                      <Link
+                        href={`/blog/${bookmark.id}`}
+                        className="block group"
+                      >
+                        {bookmark.cover_image && (
+                          <div className="relative aspect-video rounded-lg overflow-hidden mb-4">
+                            <Image
+                              src={bookmark.cover_image}
+                              alt={bookmark.title}
+                              fill
+                              className="object-cover transition-transform group-hover:scale-105"
+                            />
+                          </div>
+                        )}
+                        <h3 className="text-lg font-medium group-hover:text-purple-500 transition-colors">
+                          {bookmark.title}
+                        </h3>
+                        {bookmark.excerpt && (
+                          <p className="text-zinc-400 line-clamp-2 mt-2">
+                            {bookmark.excerpt}
+                          </p>
+                        )}
+                      </Link>
+                      <div className="flex items-center space-x-2 text-sm text-zinc-400">
+                        <div className="relative w-5 h-5">
+                          <Image
+                            src={bookmark.author.avatar_url}
+                            alt={bookmark.author.username}
+                            fill
+                            sizes="20px"
+                            className="rounded-full object-cover"
+                          />
+                        </div>
+                        <span>{bookmark.author.username}</span>
+                        <span>•</span>
+                        <span>{new Date(bookmark.created_at).toLocaleDateString()}</span>
+                      </div>
+                    </motion.div>
+                  ))
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {learningBookmarks.length === 0 ? (
+                  <p className="text-zinc-400">No learning resources bookmarked yet</p>
+                ) : (
+                  learningBookmarks.map(bookmark => (
+                    <motion.div
+                      key={bookmark.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="p-4 bg-zinc-900 rounded-lg space-y-4"
+                    >
+                      <a
+                        href={bookmark.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block group"
+                      >
+                        <h3 className="text-lg font-medium group-hover:text-purple-500 transition-colors">
+                          {bookmark.title}
+                        </h3>
+                        {bookmark.description && (
+                          <p className="text-zinc-400 line-clamp-2 mt-2">
+                            {bookmark.description}
+                          </p>
+                        )}
+                      </a>
+                      <div className="flex flex-wrap gap-2">
+                        {bookmark.category && (
+                          <span className="text-xs bg-purple-500/10 text-purple-500 px-2 py-1 rounded-full">
+                            {bookmark.category}
+                          </span>
+                        )}
+                        {bookmark.type && (
+                          <span className="text-xs bg-purple-500/10 text-purple-500 px-2 py-1 rounded-full">
+                            {bookmark.type}
+                          </span>
+                        )}
+                        {bookmark.tags?.map((tag, index) => (
+                          <span
+                            key={index}
+                            className="text-xs bg-purple-500/10 text-purple-500 px-2 py-1 rounded-full"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex items-center space-x-2 text-sm text-zinc-400">
+                        <Calendar className="w-4 h-4" />
+                        <span>{new Date(bookmark.created_at).toLocaleDateString()}</span>
+                      </div>
+                    </motion.div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         </div>
       </motion.div>

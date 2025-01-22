@@ -12,6 +12,7 @@ interface BlogPost {
   id: string;
   title: string;
   excerpt: string;
+  content?: string;
   cover_image: string;
   author_id: string;
   tags: string[];
@@ -38,6 +39,25 @@ interface User {
   };
 }
 
+interface BlogPostResponse {
+  id: string;
+  title: string;
+  content: string;
+  excerpt: string | null;
+  cover_image: string | null;
+  author_id: string;
+  tags: string[] | null;
+  created_at: string;
+  author: {
+    id: string;
+    username: string;
+    avatar_url: string | null;
+  } | null;
+  view_count: number;
+  like_count: number;
+  bookmark_count: number;
+}
+
 export default function BlogPage() {
   const supabase = createClientComponentClient();
   const [posts, setPosts] = React.useState<BlogPost[]>([]);
@@ -57,32 +77,43 @@ export default function BlogPage() {
         setError(null);
         
         // Get current user without throwing error if not authenticated
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          console.error('Session error:', sessionError);
+          throw sessionError;
+        }
+
+        // Get user data if session exists
+        if (session) {
+          const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+          if (userError) {
+            console.error('User error:', userError);
+            throw userError;
+          }
+          setUser(currentUser);
+        } else {
           setUser(null);
           setPosts([]);
           setLoading(false);
           return;
         }
 
-        const { data: { user: currentUser } } = await supabase.auth.getUser();
-        setUser(currentUser);
-
-        // Only fetch posts if user is authenticated
+        // Build the query with filters
         let query = supabase
           .from('blogs')
           .select(`
-            *,
-            author:profiles!blogs_author_id_fkey (
-              id,
-              username,
-              avatar_url
-            ),
-            views (count),
-            likes (count),
-            bookmarks (count)
+            id,
+            title,
+            content,
+            excerpt,
+            cover_image,
+            author_id,
+            tags,
+            created_at,
+            status
           `)
-          .order(sortBy === 'latest' ? 'created_at' : 'views.count', { ascending: false });
+          .or(`status.eq.published,and(status.eq.draft,author_id.eq.${session.user.id})`)
+          .order('created_at', { ascending: false });
 
         // Apply search filter if exists
         if (searchQuery) {
@@ -94,43 +125,70 @@ export default function BlogPage() {
           query = query.contains('tags', [selectedTag]);
         }
 
-        const { data, error: postsError } = await query;
+        const { data: postsData, error: postsError } = await query;
         
         if (postsError) {
-          console.error('Posts fetch error:', postsError);
+          console.error('Posts fetch error details:', postsError);
           throw postsError;
         }
 
-        if (!data) {
+        if (!postsData) {
           console.log('No posts found');
           setPosts([]);
           return;
         }
 
+        // Get unique author IDs
+        const authorIds = [...new Set(postsData.map(post => post.author_id))];
+
+        // Fetch author profiles
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, username, avatar_url')
+          .in('id', authorIds);
+
+        if (profilesError) {
+          console.error('Profiles fetch error details:', profilesError);
+          throw profilesError;
+        }
+
+        // Create a map of author profiles
+        const authorProfiles = new Map(
+          profilesData?.map(profile => [profile.id, profile]) || []
+        );
+
         // Transform the data to match our BlogPost interface
-        const transformedPosts: BlogPost[] = data.map(post => ({
-          id: post.id,
-          title: post.title,
-          excerpt: post.excerpt || '',
-          cover_image: post.cover_image || '',
-          author_id: post.author_id,
-          tags: post.tags || [],
-          created_at: post.created_at,
-          author: {
-            id: post.author?.id || post.author_id,
-            username: post.author?.username || 'Unknown',
-            avatar_url: post.author?.avatar_url || '/default-avatar.png',
-          },
-          _count: {
-            views: post.views?.[0]?.count || 0,
-            likes: post.likes?.[0]?.count || 0,
-            bookmarks: post.bookmarks?.[0]?.count || 0
-          }
-        }));
+        const transformedPosts: BlogPost[] = (postsData as unknown as BlogPostResponse[]).map(post => {
+          const authorProfile = authorProfiles.get(post.author_id);
+          return {
+            id: post.id,
+            title: post.title,
+            excerpt: post.excerpt || '',
+            cover_image: post.cover_image || '',
+            author_id: post.author_id,
+            tags: post.tags || [],
+            created_at: post.created_at,
+            author: {
+              id: authorProfile?.id || post.author_id,
+              username: authorProfile?.username || 'Unknown',
+              avatar_url: authorProfile?.avatar_url || '/default-avatar.png',
+            },
+            _count: {
+              views: 0,
+              likes: 0,
+              bookmarks: 0
+            }
+          };
+        });
 
         setPosts(transformedPosts);
       } catch (error) {
-        console.error('Error details:', error);
+        console.error('Error details:', {
+          error,
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+          name: error instanceof Error ? error.name : undefined
+        });
         setError(error instanceof Error ? error.message : 'Failed to load blog posts');
       } finally {
         setLoading(false);

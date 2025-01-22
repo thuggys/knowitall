@@ -1,57 +1,205 @@
 'use client'
 
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Book, Code, Video, Lightbulb, Star, Clock, ArrowRight, Bookmark } from 'lucide-react';
+import { Book, Code, Video, Lightbulb, Star, Clock, Bookmark, Loader2 } from 'lucide-react';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { User } from '@supabase/supabase-js';
+import { toast } from 'sonner';
 
-const learningResources = [
+// RSS feed URLs for different course platforms
+const RSS_FEEDS = [
   {
-    title: "TypeScript Deep Dive",
-    category: "Programming",
-    type: "Course",
-    icon: Code,
-    description: "Master TypeScript with comprehensive tutorials covering advanced types, decorators, and best practices.",
-    duration: "8 hours",
-    difficulty: "Intermediate",
-    rating: 4.8,
-    tags: ["TypeScript", "Web Development", "JavaScript"]
+    url: 'https://www.freecodecamp.org/news/rss/',
+    category: 'Programming',
+    type: 'Tutorial Platform'
   },
   {
-    title: "System Design Fundamentals",
-    category: "Architecture",
-    type: "Video Series",
-    icon: Video,
-    description: "Learn how to design scalable systems through real-world case studies and practical examples.",
-    duration: "12 hours",
-    difficulty: "Advanced",
-    rating: 4.9,
-    tags: ["System Design", "Architecture", "Scalability"]
+    url: 'https://dev.to/feed/tag/tutorial',
+    category: 'Development',
+    type: 'Tutorial Platform'
   },
   {
-    title: "AI & Machine Learning Basics",
-    category: "Artificial Intelligence",
-    type: "Interactive Guide",
-    icon: Lightbulb,
-    description: "An interactive journey through the fundamentals of AI and machine learning concepts.",
-    duration: "6 hours",
-    difficulty: "Beginner",
-    rating: 4.7,
-    tags: ["AI", "ML", "Data Science"]
+    url: 'https://dev.to/feed/tag/beginners',
+    category: 'Programming Basics',
+    type: 'Tutorial Platform'
   },
   {
-    title: "Cloud Computing Essentials",
-    category: "Infrastructure",
-    type: "Documentation",
-    icon: Book,
-    description: "Comprehensive guide to modern cloud computing platforms and practices.",
-    duration: "10 hours",
-    difficulty: "Intermediate",
-    rating: 4.6,
-    tags: ["Cloud", "DevOps", "Infrastructure"]
+    url: 'https://dev.to/feed/tag/webdev',
+    category: 'Web Development',
+    type: 'Tutorial Platform'
   }
 ];
 
+interface RSSItem {
+  title: string;
+  description: string;
+  link: string;
+  categories?: string[];
+  pubDate: string;
+}
+
+interface Course {
+  title: string;
+  category: string;
+  type: string;
+  icon: typeof Book | typeof Code | typeof Video | typeof Lightbulb;
+  description: string;
+  duration?: string;
+  difficulty?: string;
+  rating?: number;
+  url: string;
+  tags: string[];
+  pubDate?: string;
+}
+
 const LearningHub = () => {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [bookmarkedUrls, setBookmarkedUrls] = useState<Set<string>>(new Set());
+  const supabase = createClientComponentClient();
+
+  const fetchRSSFeeds = useCallback(async () => {
+    try {
+      const RSS2JSON_API_KEY = process.env.NEXT_PUBLIC_RSS2JSON_API_KEY;
+      const fetchPromises = RSS_FEEDS.map(async (feed) => {
+        const response = await fetch(
+          `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(
+            feed.url
+          )}&api_key=${RSS2JSON_API_KEY}`
+        );
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch ${feed.url}`);
+        }
+
+        const data = await response.json();
+        
+        return data.items.map((item: RSSItem) => ({
+          title: item.title,
+          category: feed.category,
+          type: feed.type,
+          icon: determineIcon(item.categories?.[0] || feed.category),
+          description: item.description.replace(/<[^>]*>/g, '').substring(0, 150) + '...',
+          url: item.link,
+          tags: item.categories || [feed.category],
+          pubDate: item.pubDate,
+          rating: 4.5, // Default rating since RSS feeds don't typically include ratings
+        }));
+      });
+
+      const allCourses = (await Promise.all(fetchPromises)).flat();
+      setCourses(allCourses);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch courses');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const determineIcon = (category: string) => {
+    category = category.toLowerCase();
+    if (category.includes('programming') || category.includes('development')) {
+      return Code;
+    } else if (category.includes('video') || category.includes('lecture')) {
+      return Video;
+    } else if (category.includes('ai') || category.includes('machine learning')) {
+      return Lightbulb;
+    }
+    return Book;
+  };
+
+  // Add function to handle bookmarking
+  const handleBookmark = async (course: Course) => {
+    if (!user) {
+      toast.error('Please sign in to bookmark resources');
+      return;
+    }
+
+    try {
+      const isBookmarked = bookmarkedUrls.has(course.url);
+      
+      if (isBookmarked) {
+        // Remove bookmark
+        const { error } = await supabase
+          .from('bookmarks')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('url', course.url);
+
+        if (error) throw error;
+
+        setBookmarkedUrls(prev => {
+          const next = new Set(prev);
+          next.delete(course.url);
+          return next;
+        });
+        toast.success('Bookmark removed');
+      } else {
+        // Add bookmark
+        const { error } = await supabase
+          .from('bookmarks')
+          .insert([{
+            user_id: user.id,
+            title: course.title,
+            description: course.description,
+            url: course.url,
+            category: course.category,
+            type: course.type,
+            tags: course.tags
+          }]);
+
+        if (error) throw error;
+
+        setBookmarkedUrls(prev => new Set([...prev, course.url]));
+        toast.success('Resource bookmarked');
+      }
+    } catch (err) {
+      console.error('Error toggling bookmark:', err);
+      toast.error('Failed to update bookmark');
+    }
+  };
+
+  // Add function to fetch user's bookmarks
+  const fetchBookmarks = useCallback(async (userId: string) => {
+    try {
+      const { data: bookmarks, error } = await supabase
+        .from('bookmarks')
+        .select('url')
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      setBookmarkedUrls(new Set(bookmarks.map(b => b.url)));
+    } catch (err) {
+      console.error('Error fetching bookmarks:', err);
+    }
+  }, [supabase]);
+
+  // Add effect to get user and their bookmarks
+  useEffect(() => {
+    const getUser = async () => {
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error) throw error;
+        setUser(user);
+        if (user) {
+          fetchBookmarks(user.id);
+        }
+      } catch (err) {
+        console.error('Error getting user:', err);
+      }
+    };
+
+    getUser();
+  }, [supabase, fetchBookmarks]);
+
+  useEffect(() => {
+    fetchRSSFeeds();
+  }, [fetchRSSFeeds]);
+
   return (
     <div className="min-h-screen p-8">
       <motion.div
@@ -85,95 +233,116 @@ const LearningHub = () => {
           <div className="text-purple-500">With Expert Resources</div>
         </motion.h1>
 
+        {/* Loading State */}
+        {loading && (
+          <div className="flex justify-center items-center min-h-[400px]">
+            <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <div className="text-red-500 text-center p-4">
+            {error}
+          </div>
+        )}
+
         {/* Learning Resources Grid */}
-        <motion.div 
-          className="grid grid-cols-1 md:grid-cols-2 gap-6"
-          variants={{
-            hidden: { opacity: 0 },
-            show: {
-              opacity: 1,
-              transition: {
-                staggerChildren: 0.1
+        {!loading && !error && (
+          <motion.div 
+            className="grid grid-cols-1 md:grid-cols-2 gap-6"
+            variants={{
+              hidden: { opacity: 0 },
+              show: {
+                opacity: 1,
+                transition: {
+                  staggerChildren: 0.1
+                }
               }
-            }
-          }}
-          initial="hidden"
-          animate="show"
-        >
-          {learningResources.map((resource) => {
-            const Icon = resource.icon;
-            return (
-              <motion.div
-                key={resource.title}
-                whileHover={{ scale: 1.02 }}
-                className="bg-zinc-900 rounded-xl p-6 space-y-4"
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-purple-500/10 rounded-lg">
-                      <Icon className="w-5 h-5 text-purple-500" />
-                    </div>
-                    <div>
-                      <span className="text-purple-500 text-sm">{resource.category}</span>
-                      <h3 className="text-xl font-semibold mt-1">{resource.title}</h3>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <Star className="w-4 h-4 text-yellow-500" />
-                    <span className="text-sm text-gray-500">{resource.rating}</span>
-                  </div>
-                </div>
-
-                <p className="text-gray-500 text-sm">{resource.description}</p>
-
-                <div className="flex flex-wrap gap-2">
-                  {resource.tags.map(tag => (
-                    <span
-                      key={tag}
-                      className="text-xs bg-purple-500/10 text-purple-500 px-2 py-1 rounded-full"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="flex items-center justify-between pt-4">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex items-center space-x-2 text-sm text-gray-500">
-                      <Clock className="w-4 h-4" />
-                      <span>{resource.duration}</span>
-                    </div>
-                    <span className="text-sm text-gray-500">{resource.difficulty}</span>
-                  </div>
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    className="text-purple-500 hover:text-purple-400"
-                  >
-                    <Bookmark className="w-4 h-4" />
-                  </motion.button>
-                </div>
-              </motion.div>
-            );
-          })}
-        </motion.div>
-
-        {/* Call to Action */}
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
-          className="flex justify-center mt-12"
-        >
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="flex items-center space-x-2 bg-purple-500 hover:bg-purple-600 text-white px-8 py-3 rounded-full text-sm font-medium transition-colors"
+            }}
+            initial="hidden"
+            animate="show"
           >
-            <span>Explore All Resources</span>
-            <ArrowRight className="w-4 h-4" />
-          </motion.button>
-        </motion.div>
+            {courses.map((course, index) => {
+              const Icon = course.icon;
+              const isBookmarked = bookmarkedUrls.has(course.url);
+              
+              return (
+                <motion.div
+                  key={`${course.title}-${index}`}
+                  whileHover={{ scale: 1.02 }}
+                  className="bg-zinc-900 rounded-xl p-6 space-y-4 block cursor-pointer"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-purple-500/10 rounded-lg">
+                        <Icon className="w-5 h-5 text-purple-500" />
+                      </div>
+                      <div>
+                        <span className="text-purple-500 text-sm">{course.category}</span>
+                        <h3 className="text-xl font-semibold mt-1">{course.title}</h3>
+                      </div>
+                    </div>
+                    {course.rating && (
+                      <div className="flex items-center space-x-1">
+                        <Star className="w-4 h-4 text-yellow-500" />
+                        <span className="text-sm text-gray-500">{course.rating}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-gray-500 text-sm">{course.description}</p>
+
+                  <div className="flex flex-wrap gap-2">
+                    {course.tags.map((tag, tagIndex) => (
+                      <span
+                        key={`${tag}-${tagIndex}`}
+                        className="text-xs bg-purple-500/10 text-purple-500 px-2 py-1 rounded-full"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-4">
+                    <div className="flex items-center space-x-4">
+                      {course.pubDate && (
+                        <div className="flex items-center space-x-2 text-sm text-gray-500">
+                          <Clock className="w-4 h-4" />
+                          <span>{new Date(course.pubDate).toLocaleDateString()}</span>
+                        </div>
+                      )}
+                      {course.difficulty && (
+                        <span className="text-sm text-gray-500">{course.difficulty}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-4">
+                      <a
+                        href={course.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-purple-500 hover:text-purple-400 text-sm"
+                      >
+                        Read More →
+                      </a>
+                      <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleBookmark(course);
+                        }}
+                        className={`text-purple-500 hover:text-purple-400 ${isBookmarked ? 'text-purple-500' : 'text-gray-500'}`}
+                      >
+                        <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
+                      </motion.button>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        )}
 
         {/* Stats Section */}
         <motion.div 
@@ -183,9 +352,9 @@ const LearningHub = () => {
           className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-16"
         >
           {[
-            { label: "Learning Paths", value: "25+", icon: Book },
-            { label: "Video Tutorials", value: "100+", icon: Video },
-            { label: "Active Learners", value: "5K+", icon: Lightbulb }
+            { label: "Available Courses", value: `${courses.length}+`, icon: Book },
+            { label: "Learning Platforms", value: `${RSS_FEEDS.length}`, icon: Video },
+            { label: "Updated Daily", value: "24/7", icon: Lightbulb }
           ].map((stat) => (
             <motion.div
               key={stat.label}
