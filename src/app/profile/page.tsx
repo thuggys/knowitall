@@ -5,7 +5,11 @@ import { motion } from 'framer-motion';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { User } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
-import { Loader2, Camera, LogOut, Github, Mail, User as UserIcon, Calendar, Globe } from 'lucide-react';
+import { 
+  Loader2, Camera, LogOut, Mail, User as UserIcon, 
+  Calendar, Globe, BookMarked, Heart, Sparkles, 
+  GraduationCap, Settings, ChevronRight 
+} from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -52,6 +56,26 @@ interface LearningBookmark {
   tags: string[];
   created_at: string;
 }
+
+interface EmptyStateProps {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+}
+
+const EmptyState: React.FC<EmptyStateProps> = ({ icon: Icon, title, description }) => (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    className="text-center py-12"
+  >
+    <div className="w-12 h-12 bg-zinc-900 rounded-full flex items-center justify-center mx-auto mb-4">
+      <Icon className="w-6 h-6 text-zinc-400" />
+    </div>
+    <h3 className="text-lg font-medium text-zinc-300 mb-2">{title}</h3>
+    <p className="text-zinc-500">{description}</p>
+  </motion.div>
+);
 
 export default function ProfilePage() {
   const supabase = createClientComponentClient();
@@ -399,17 +423,17 @@ export default function ProfilePage() {
       // Upload image to Supabase Storage
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}-${Math.random()}.${fileExt}`;
-      const filePath = `profile-images/${fileName}`;
+      const filePath = fileName;  // Simplified path since we're in avatars bucket
 
       const { error: uploadError } = await supabase.storage
-        .from('avatars')
+        .from('avatars')  // Using the avatars bucket we created
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
+        .from('avatars')  // Using the avatars bucket
         .getPublicUrl(filePath);
 
       // Update profile with new avatar URL
@@ -426,6 +450,14 @@ export default function ProfilePage() {
       
       // Hide success message after 3 seconds
       setTimeout(() => setSuccess(false), 3000);
+
+      // Refresh the entire app to update all instances of the profile picture
+      router.refresh();
+      
+      // Force a hard refresh after a short delay to ensure all components update
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     } catch (error) {
       console.error('Error uploading image:', error);
       setError(error instanceof Error ? error.message : 'Failed to upload image');
@@ -448,11 +480,11 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen p-4 md:p-8 max-w-4xl mx-auto">
+    <div className="min-h-screen p-4 md:p-8">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="space-y-8"
+        className="space-y-8 max-w-4xl mx-auto"
       >
         {/* Error Message */}
         {error && (
@@ -476,103 +508,106 @@ export default function ProfilePage() {
           </motion.div>
         )}
 
-        {/* Header */}
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-center space-x-4">
-            <div className="relative">
-              <div className="w-20 h-20 rounded-full bg-purple-500/20 flex items-center justify-center overflow-hidden">
-                {profile?.avatar_url ? (
-                  <Image 
-                    src={profile.avatar_url}
-                    alt={profile.full_name}
-                    fill
-                    sizes="80px"
-                    className="w-full h-full object-cover"
+        {/* Profile Header */}
+        <div className="bg-zinc-900 rounded-xl p-6 md:p-8 space-y-6">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center space-x-4">
+              <div className="relative">
+                <div className="w-24 h-24 rounded-full bg-purple-500/20 flex items-center justify-center overflow-hidden">
+                  {profile?.avatar_url ? (
+                    <Image 
+                      src={profile.avatar_url}
+                      alt={profile.full_name}
+                      fill
+                      sizes="96px"
+                      className="object-cover"
+                    />
+                  ) : (
+                    <UserIcon className="w-12 h-12 text-purple-500" />
+                  )}
+                </div>
+                <label 
+                  className="absolute bottom-0 right-0 p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 transition-colors cursor-pointer"
+                  aria-label="Change profile picture"
+                >
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                    disabled={updating}
                   />
-                ) : (
-                  <UserIcon className="w-8 h-8 text-purple-500" />
+                  {updating ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Camera className="w-4 h-4" />
+                  )}
+                </label>
+              </div>
+              <div>
+                <h1 className="text-2xl font-semibold">{profile?.full_name || user?.email}</h1>
+                <p className="text-zinc-400">@{profile?.username || 'username'}</p>
+                {profile?.bio && (
+                  <p className="text-zinc-300 mt-2 max-w-md">{profile.bio}</p>
                 )}
               </div>
-              <label 
-                className="absolute bottom-0 right-0 p-1.5 bg-zinc-800 rounded-full hover:bg-zinc-700 transition-colors cursor-pointer"
-                aria-label="Change profile picture"
-              >
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="hidden"
-                  disabled={updating}
-                />
-                {updating ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Camera className="w-4 h-4" />
-                )}
-              </label>
             </div>
-            <div>
-              <h1 className="text-2xl font-semibold">{profile?.full_name || user.email}</h1>
-              <p className="text-zinc-400">@{profile?.username || 'username'}</p>
+            <div className="flex items-center space-x-3">
+              {editMode ? (
+                <>
+                  <button
+                    onClick={() => setEditMode(false)}
+                    className="px-4 py-2 text-sm text-zinc-400 hover:text-white"
+                    disabled={updating}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleUpdateProfile}
+                    className="px-4 py-2 bg-purple-500 hover:bg-purple-600 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center space-x-2"
+                    disabled={updating}
+                  >
+                    {updating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      'Save Changes'
+                    )}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setEditMode(true)}
+                    className="p-2 text-zinc-400 hover:text-white transition-colors rounded-lg hover:bg-zinc-800"
+                    title="Edit Profile"
+                  >
+                    <Settings className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={handleSignOut}
+                    className="p-2 text-zinc-400 hover:text-white transition-colors rounded-lg hover:bg-zinc-800"
+                    title="Sign Out"
+                  >
+                    <LogOut className="w-5 h-5" />
+                  </button>
+                </>
+              )}
             </div>
           </div>
-          <div className="flex items-center space-x-3">
-            {editMode ? (
-              <>
-                <button
-                  onClick={() => setEditMode(false)}
-                  className="px-4 py-2 text-sm text-zinc-400 hover:text-white"
-                  disabled={updating}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleUpdateProfile}
-                  className="px-4 py-2 bg-purple-500 hover:bg-purple-600 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center space-x-2"
-                  disabled={updating}
-                >
-                  {updating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    'Save Changes'
-                  )}
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => setEditMode(true)}
-                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Edit Profile
-                </button>
-                <button
-                  onClick={handleSignOut}
-                  className="p-2 text-zinc-400 hover:text-white transition-colors"
-                  aria-label="Sign out"
-                >
-                  <LogOut className="w-5 h-5" />
-                </button>
-              </>
-            )}
-          </div>
-        </div>
 
-        {/* Profile Info */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="space-y-6">
-            {editMode ? (
-              <div className="space-y-4">
+          {editMode ? (
+            <div className="space-y-4 mt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm text-zinc-400 mb-2">Username</label>
                   <input
                     type="text"
                     value={formData.username}
                     onChange={(e) => setFormData(prev => ({ ...prev, username: e.target.value }))}
-                    className="w-full px-4 py-2 bg-zinc-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-4 py-2 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                     placeholder="Username"
                   />
                 </div>
@@ -582,247 +617,341 @@ export default function ProfilePage() {
                     type="text"
                     value={formData.full_name}
                     onChange={(e) => setFormData(prev => ({ ...prev, full_name: e.target.value }))}
-                    className="w-full px-4 py-2 bg-zinc-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-4 py-2 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                     placeholder="Full Name"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm text-zinc-400 mb-2">Bio</label>
-                  <textarea
-                    value={formData.bio}
-                    onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
-                    className="w-full px-4 py-2 bg-zinc-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[100px]"
-                    placeholder="Tell us about yourself"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-zinc-400 mb-2">Website</label>
-                  <input
-                    type="url"
-                    value={formData.website}
-                    onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
-                    className="w-full px-4 py-2 bg-zinc-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder="https://example.com"
-                  />
-                </div>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {profile?.bio && (
-                  <p className="text-zinc-300">{profile.bio}</p>
-                )}
-                <div className="space-y-2">
-                  {profile?.website && (
-                    <a
-                      href={profile.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center space-x-2 text-sm text-zinc-400 hover:text-purple-500"
-                    >
-                      <Globe className="w-4 h-4" />
-                      <span>{profile.website}</span>
-                    </a>
-                  )}
-                  <div className="flex items-center space-x-2 text-sm text-zinc-400">
-                    <Github className="w-4 h-4" />
-                    <span>GitHub Account Connected</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-sm text-zinc-400">
-                    <Mail className="w-4 h-4" />
-                    <span>{user.email}</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-sm text-zinc-400">
-                    <Calendar className="w-4 h-4" />
-                    <span>Joined {new Date(user.created_at).toLocaleDateString()}</span>
-                  </div>
-                </div>
+              <div>
+                <label className="block text-sm text-zinc-400 mb-2">Bio</label>
+                <textarea
+                  value={formData.bio}
+                  onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[100px]"
+                  placeholder="Tell us about yourself"
+                />
               </div>
-            )}
-          </div>
-
-          {/* Activity or Stats Section */}
-          <div className="space-y-6">
-            <div className="flex space-x-4 border-b border-zinc-800">
-              <button
-                onClick={() => setActiveTab('likes')}
-                className={`pb-2 text-sm font-medium transition-colors ${
-                  activeTab === 'likes'
-                    ? 'text-purple-500 border-b-2 border-purple-500'
-                    : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                Liked Posts
-              </button>
-              <button
-                onClick={() => setActiveTab('bookmarks')}
-                className={`pb-2 text-sm font-medium transition-colors ${
-                  activeTab === 'bookmarks'
-                    ? 'text-purple-500 border-b-2 border-purple-500'
-                    : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                Blog Bookmarks
-              </button>
-              <button
-                onClick={() => setActiveTab('learning')}
-                className={`pb-2 text-sm font-medium transition-colors ${
-                  activeTab === 'learning'
-                    ? 'text-purple-500 border-b-2 border-purple-500'
-                    : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                Learning Bookmarks
-              </button>
+              <div>
+                <label className="block text-sm text-zinc-400 mb-2">Website</label>
+                <input
+                  type="url"
+                  value={formData.website}
+                  onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="https://example.com"
+                />
+              </div>
             </div>
+          ) : (
+            <div className="flex flex-wrap gap-4 mt-4">
+              {user?.email && (
+                <div className="flex items-center space-x-2 text-sm text-zinc-400">
+                  <Mail className="w-4 h-4" />
+                  <span>{user.email}</span>
+                </div>
+              )}
+              {profile?.website && (
+                <a
+                  href={profile.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-2 text-sm text-zinc-400 hover:text-purple-500"
+                >
+                  <Globe className="w-4 h-4" />
+                  <span>{profile.website}</span>
+                </a>
+              )}
+              <div className="flex items-center space-x-2 text-sm text-zinc-400">
+                <Calendar className="w-4 h-4" />
+                <span>Joined {new Date(user?.created_at || '').toLocaleDateString()}</span>
+              </div>
+            </div>
+          )}
+        </div>
 
-            {activeTab === 'likes' ? (
-              <div className="space-y-4">
-                {likedPosts.length === 0 ? (
-                  <p className="text-zinc-400">No liked posts yet</p>
-                ) : (
-                  likedPosts.map(post => (
-                    <motion.div
-                      key={post.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="p-4 bg-zinc-900 rounded-lg space-y-2"
-                    >
-                      <Link
-                        href={`/blog/${post.id}`}
-                        className="text-lg font-medium hover:text-purple-500 transition-colors"
-                      >
-                        {post.title}
-                      </Link>
-                      <div className="flex items-center space-x-2 text-sm text-zinc-400">
-                        <div className="relative w-5 h-5">
-                          <Image
-                            src={post.author.avatar_url}
-                            alt={post.author.username}
-                            fill
-                            sizes="20px"
-                            className="rounded-full object-cover"
-                          />
-                        </div>
-                        <span>{post.author.username}</span>
-                        <span>•</span>
-                        <span>{new Date(post.created_at).toLocaleDateString()}</span>
-                      </div>
-                    </motion.div>
-                  ))
-                )}
+        {/* Activity Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            className="bg-zinc-900 rounded-xl p-6 flex items-center justify-between"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-purple-500/10 rounded-lg">
+                <Heart className="w-5 h-5 text-purple-500" />
               </div>
-            ) : activeTab === 'bookmarks' ? (
-              <div className="space-y-4">
-                {bookmarks.length === 0 ? (
-                  <p className="text-zinc-400">No bookmarks yet</p>
-                ) : (
-                  bookmarks.map(bookmark => (
-                    <motion.div
-                      key={bookmark.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="p-4 bg-zinc-900 rounded-lg space-y-4"
-                    >
-                      <Link
-                        href={`/blog/${bookmark.id}`}
-                        className="block group"
-                      >
-                        {bookmark.cover_image && (
-                          <div className="relative aspect-video rounded-lg overflow-hidden mb-4">
-                            <Image
-                              src={bookmark.cover_image}
-                              alt={bookmark.title}
-                              fill
-                              className="object-cover transition-transform group-hover:scale-105"
-                            />
-                          </div>
-                        )}
-                        <h3 className="text-lg font-medium group-hover:text-purple-500 transition-colors">
-                          {bookmark.title}
-                        </h3>
-                        {bookmark.excerpt && (
-                          <p className="text-zinc-400 line-clamp-2 mt-2">
-                            {bookmark.excerpt}
-                          </p>
-                        )}
-                      </Link>
-                      <div className="flex items-center space-x-2 text-sm text-zinc-400">
-                        <div className="relative w-5 h-5">
-                          <Image
-                            src={bookmark.author.avatar_url}
-                            alt={bookmark.author.username}
-                            fill
-                            sizes="20px"
-                            className="rounded-full object-cover"
-                          />
-                        </div>
-                        <span>{bookmark.author.username}</span>
-                        <span>•</span>
-                        <span>{new Date(bookmark.created_at).toLocaleDateString()}</span>
-                      </div>
-                    </motion.div>
-                  ))
-                )}
+              <div>
+                <p className="text-sm text-zinc-400">Liked Posts</p>
+                <p className="text-2xl font-semibold">{likedPosts.length}</p>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {learningBookmarks.length === 0 ? (
-                  <p className="text-zinc-400">No learning resources bookmarked yet</p>
-                ) : (
-                  learningBookmarks.map(bookmark => (
-                    <motion.div
-                      key={bookmark.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="p-4 bg-zinc-900 rounded-lg space-y-4"
-                    >
-                      <a
-                        href={bookmark.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block group"
-                      >
-                        <h3 className="text-lg font-medium group-hover:text-purple-500 transition-colors">
-                          {bookmark.title}
-                        </h3>
-                        {bookmark.description && (
-                          <p className="text-zinc-400 line-clamp-2 mt-2">
-                            {bookmark.description}
-                          </p>
-                        )}
-                      </a>
-                      <div className="flex flex-wrap gap-2">
-                        {bookmark.category && (
-                          <span className="text-xs bg-purple-500/10 text-purple-500 px-2 py-1 rounded-full">
-                            {bookmark.category}
-                          </span>
-                        )}
-                        {bookmark.type && (
-                          <span className="text-xs bg-purple-500/10 text-purple-500 px-2 py-1 rounded-full">
-                            {bookmark.type}
-                          </span>
-                        )}
-                        {bookmark.tags?.map((tag, index) => (
-                          <span
-                            key={index}
-                            className="text-xs bg-purple-500/10 text-purple-500 px-2 py-1 rounded-full"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="flex items-center space-x-2 text-sm text-zinc-400">
-                        <Calendar className="w-4 h-4" />
-                        <span>{new Date(bookmark.created_at).toLocaleDateString()}</span>
-                      </div>
-                    </motion.div>
-                  ))
-                )}
+            </div>
+            <ChevronRight className="w-5 h-5 text-zinc-600" />
+          </motion.div>
+
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            className="bg-zinc-900 rounded-xl p-6 flex items-center justify-between"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-purple-500/10 rounded-lg">
+                <BookMarked className="w-5 h-5 text-purple-500" />
               </div>
-            )}
+              <div>
+                <p className="text-sm text-zinc-400">Blog Bookmarks</p>
+                <p className="text-2xl font-semibold">{bookmarks.length}</p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-zinc-600" />
+          </motion.div>
+
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            className="bg-zinc-900 rounded-xl p-6 flex items-center justify-between"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-purple-500/10 rounded-lg">
+                <GraduationCap className="w-5 h-5 text-purple-500" />
+              </div>
+              <div>
+                <p className="text-sm text-zinc-400">Learning Resources</p>
+                <p className="text-2xl font-semibold">{learningBookmarks.length}</p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-zinc-600" />
+          </motion.div>
+        </div>
+
+        {/* Tabs Navigation */}
+        <div className="border-b border-zinc-800">
+          <div className="flex space-x-8">
+            <button
+              onClick={() => setActiveTab('likes')}
+              className={`pb-4 text-sm font-medium transition-colors relative ${
+                activeTab === 'likes'
+                  ? 'text-purple-500'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <Heart className="w-4 h-4" />
+                <span>Liked Posts</span>
+              </div>
+              {activeTab === 'likes' && (
+                <motion.div
+                  layoutId="activeTab"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500"
+                />
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('bookmarks')}
+              className={`pb-4 text-sm font-medium transition-colors relative ${
+                activeTab === 'bookmarks'
+                  ? 'text-purple-500'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <BookMarked className="w-4 h-4" />
+                <span>Blog Bookmarks</span>
+              </div>
+              {activeTab === 'bookmarks' && (
+                <motion.div
+                  layoutId="activeTab"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500"
+                />
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('learning')}
+              className={`pb-4 text-sm font-medium transition-colors relative ${
+                activeTab === 'learning'
+                  ? 'text-purple-500'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <GraduationCap className="w-4 h-4" />
+                <span>Learning Resources</span>
+              </div>
+              {activeTab === 'learning' && (
+                <motion.div
+                  layoutId="activeTab"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500"
+                />
+              )}
+            </button>
           </div>
+        </div>
+
+        {/* Tab Content */}
+        <div className="space-y-4">
+          {activeTab === 'likes' ? (
+            likedPosts.length === 0 ? (
+              <EmptyState
+                icon={Heart}
+                title="No liked posts yet"
+                description="Posts you like will appear here"
+              />
+            ) : (
+              <div className="grid gap-4">
+                {likedPosts.map(post => (
+                  <PostCard key={post.id} post={post} />
+                ))}
+              </div>
+            )
+          ) : activeTab === 'bookmarks' ? (
+            bookmarks.length === 0 ? (
+              <EmptyState
+                icon={BookMarked}
+                title="No bookmarked posts yet"
+                description="Blog posts you bookmark will appear here"
+              />
+            ) : (
+              <div className="grid gap-4">
+                {bookmarks.map(bookmark => (
+                  <BookmarkCard key={bookmark.id} bookmark={bookmark} />
+                ))}
+              </div>
+            )
+          ) : (
+            learningBookmarks.length === 0 ? (
+              <EmptyState
+                icon={GraduationCap}
+                title="No learning resources saved yet"
+                description="Learning resources you bookmark will appear here"
+              />
+            ) : (
+              <div className="grid gap-4">
+                {learningBookmarks.map(bookmark => (
+                  <LearningCard key={bookmark.id} bookmark={bookmark} />
+                ))}
+              </div>
+            )
+          )}
         </div>
       </motion.div>
     </div>
   );
-} 
+}
+
+// Helper Components
+const PostCard = ({ post }: { post: LikedPost }) => (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    whileHover={{ scale: 1.01 }}
+    className="bg-zinc-900 rounded-xl p-4 transition-colors hover:bg-zinc-800/50"
+  >
+    <Link href={`/blog/${post.id}`} className="block">
+      <div className="flex items-center space-x-3 mb-2">
+        <div className="relative w-6 h-6">
+          <Image
+            src={post.author.avatar_url}
+            alt={post.author.username}
+            fill
+            sizes="24px"
+            className="rounded-full object-cover"
+          />
+        </div>
+        <span className="text-sm text-zinc-400">{post.author.username}</span>
+        <span className="text-zinc-600">•</span>
+        <span className="text-sm text-zinc-400">
+          {new Date(post.created_at).toLocaleDateString()}
+        </span>
+      </div>
+      <h3 className="text-lg font-medium hover:text-purple-500 transition-colors">
+        {post.title}
+      </h3>
+    </Link>
+  </motion.div>
+);
+
+const BookmarkCard = ({ bookmark }: { bookmark: Bookmark }) => (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    whileHover={{ scale: 1.01 }}
+    className="bg-zinc-900 rounded-xl overflow-hidden transition-colors hover:bg-zinc-800/50"
+  >
+    <Link href={`/blog/${bookmark.id}`} className="block">
+      {bookmark.cover_image && (
+        <div className="relative aspect-video">
+          <Image
+            src={bookmark.cover_image}
+            alt={bookmark.title}
+            fill
+            className="object-cover"
+          />
+        </div>
+      )}
+      <div className="p-4">
+        <div className="flex items-center space-x-3 mb-2">
+          <div className="relative w-6 h-6">
+            <Image
+              src={bookmark.author.avatar_url}
+              alt={bookmark.author.username}
+              fill
+              sizes="24px"
+              className="rounded-full object-cover"
+            />
+          </div>
+          <span className="text-sm text-zinc-400">{bookmark.author.username}</span>
+          <span className="text-zinc-600">•</span>
+          <span className="text-sm text-zinc-400">
+            {new Date(bookmark.created_at).toLocaleDateString()}
+          </span>
+        </div>
+        <h3 className="text-lg font-medium hover:text-purple-500 transition-colors">
+          {bookmark.title}
+        </h3>
+        {bookmark.excerpt && (
+          <p className="text-zinc-400 mt-2 line-clamp-2">{bookmark.excerpt}</p>
+        )}
+      </div>
+    </Link>
+  </motion.div>
+);
+
+const LearningCard = ({ bookmark }: { bookmark: LearningBookmark }) => (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    whileHover={{ scale: 1.01 }}
+    className="bg-zinc-900 rounded-xl p-4 transition-colors hover:bg-zinc-800/50"
+  >
+    <a
+      href={bookmark.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block"
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center space-x-2">
+          <div className="p-2 bg-purple-500/10 rounded-lg">
+            <Sparkles className="w-4 h-4 text-purple-500" />
+          </div>
+          <span className="text-sm font-medium text-purple-500">{bookmark.category}</span>
+        </div>
+        <span className="text-sm text-zinc-500">
+          {new Date(bookmark.created_at).toLocaleDateString()}
+        </span>
+      </div>
+      <h3 className="text-lg font-medium hover:text-purple-500 transition-colors">
+        {bookmark.title}
+      </h3>
+      {bookmark.description && (
+        <p className="text-zinc-400 mt-2 line-clamp-2">{bookmark.description}</p>
+      )}
+      <div className="flex flex-wrap gap-2 mt-3">
+        {bookmark.tags.map((tag, index) => (
+          <span
+            key={index}
+            className="text-xs bg-zinc-800 text-zinc-400 px-2 py-1 rounded-full"
+          >
+            {tag}
+          </span>
+        ))}
+      </div>
+    </a>
+  </motion.div>
+); 

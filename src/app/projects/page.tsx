@@ -106,12 +106,15 @@ const ProjectsPage = () => {
                   show: { opacity: 1, y: 0 }
                 }}
                 whileHover={{ scale: 1.05 }}
-                className="bg-zinc-900 rounded-xl p-6 space-y-4"
+                className="bg-zinc-900 rounded-xl p-6 space-y-4 cursor-pointer group"
+                onClick={() => {
+                  document.querySelector('#waitlist')?.scrollIntoView({ behavior: 'smooth' });
+                }}
               >
                 <div className="p-3 bg-purple-500/10 rounded-lg w-fit">
                   <Icon className="w-6 h-6 text-purple-500" />
                 </div>
-                <h3 className="text-xl font-semibold">{feature.title}</h3>
+                <h3 className="text-xl font-semibold group-hover:text-purple-500 transition-colors">{feature.title}</h3>
                 <p className="text-zinc-400">{feature.description}</p>
               </motion.div>
             );
@@ -120,6 +123,7 @@ const ProjectsPage = () => {
 
         {/* Newsletter Signup */}
         <motion.div 
+          id="waitlist"
           initial={{ opacity: 0, y: 50 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.7 }}

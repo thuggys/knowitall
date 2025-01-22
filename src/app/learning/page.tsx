@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Book, Code, Video, Lightbulb, Star, Clock, Bookmark, Loader2 } from 'lucide-react';
+import { Book, Code, Video, Lightbulb, Clock, Bookmark, Loader2 } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
@@ -268,10 +268,13 @@ const LearningHub = () => {
               const isBookmarked = bookmarkedUrls.has(course.url);
               
               return (
-                <motion.div
+                <motion.a
                   key={`${course.title}-${index}`}
+                  href={course.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   whileHover={{ scale: 1.02 }}
-                  className="bg-zinc-900 rounded-xl p-6 space-y-4 block cursor-pointer"
+                  className="bg-zinc-900 rounded-xl p-6 space-y-4 block cursor-pointer relative group"
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex items-center space-x-3">
@@ -280,15 +283,9 @@ const LearningHub = () => {
                       </div>
                       <div>
                         <span className="text-purple-500 text-sm">{course.category}</span>
-                        <h3 className="text-xl font-semibold mt-1">{course.title}</h3>
+                        <h3 className="text-xl font-semibold mt-1 group-hover:text-purple-500 transition-colors">{course.title}</h3>
                       </div>
                     </div>
-                    {course.rating && (
-                      <div className="flex items-center space-x-1">
-                        <Star className="w-4 h-4 text-yellow-500" />
-                        <span className="text-sm text-gray-500">{course.rating}</span>
-                      </div>
-                    )}
                   </div>
 
                   <p className="text-gray-500 text-sm">{course.description}</p>
@@ -316,29 +313,20 @@ const LearningHub = () => {
                         <span className="text-sm text-gray-500">{course.difficulty}</span>
                       )}
                     </div>
-                    <div className="flex items-center space-x-4">
-                      <a
-                        href={course.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-purple-500 hover:text-purple-400 text-sm"
-                      >
-                        Read More →
-                      </a>
-                      <motion.button
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleBookmark(course);
-                        }}
-                        className={`text-purple-500 hover:text-purple-400 ${isBookmarked ? 'text-purple-500' : 'text-gray-500'}`}
-                      >
-                        <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
-                      </motion.button>
-                    </div>
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleBookmark(course);
+                      }}
+                      className={`text-purple-500 hover:text-purple-400 ${isBookmarked ? 'text-purple-500' : 'text-gray-500'}`}
+                    >
+                      <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
+                    </motion.button>
                   </div>
-                </motion.div>
+                </motion.a>
               );
             })}
           </motion.div>
