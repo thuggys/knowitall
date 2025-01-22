@@ -210,7 +210,7 @@ export default function ArticlePage() {
             <div className="flex items-center space-x-2">
               <img
                 src={article.source.image}
-                alt={article.source.name}
+                alt={`${article.source.name} logo`}
                 className="w-6 h-6 rounded-full"
               />
               <span className="text-sm text-zinc-400">{article.source.name}</span>
@@ -243,7 +243,7 @@ export default function ArticlePage() {
           <div className="relative aspect-video rounded-xl overflow-hidden">
             <img
               src={article.image}
-              alt={article.title}
+              alt={`Featured image for ${article.title}`}
               className="w-full h-full object-cover"
             />
           </div>
@@ -281,14 +281,14 @@ export default function ArticlePage() {
                   <div className="relative h-40 rounded-lg overflow-hidden mb-4">
                     <img
                       src={related.image}
-                      alt={related.title}
+                      alt={`Featured image for ${related.title}`}
                       className="w-full h-full object-cover transition-transform group-hover:scale-105"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                     <div className="absolute bottom-4 left-4 right-4 flex items-center space-x-2">
                       <img
                         src={related.source.image}
-                        alt={related.source.name}
+                        alt={`${related.source.name} logo`}
                         className="w-5 h-5 rounded-full"
                       />
                       <span className="text-sm text-white/80">{related.source.name}</span>
