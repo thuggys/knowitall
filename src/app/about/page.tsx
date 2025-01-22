@@ -2,208 +2,156 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { User, Code, Brain, Coffee, Heart, Terminal, Cpu, Globe, Award, BookOpen, Rocket, Zap } from 'lucide-react';
+import { BookOpen, Rocket, Brain, Code, Globe, Users } from 'lucide-react';
+import Link from 'next/link';
 
-const skills = [
-  { name: "Frontend", level: 90, icon: Globe },
-  { name: "Backend", level: 85, icon: Terminal },
-  { name: "AI/ML", level: 80, icon: Brain },
-  { name: "DevOps", level: 75, icon: Cpu }
-];
-
-const interests = [
-  "Artificial Intelligence",
-  "Web Development",
-  "Open Source",
-  "Cloud Computing",
-  "System Design",
-  "UI/UX Design"
-];
-
-const achievements = [
+const features = [
   {
-    year: "2023",
-    title: "Tech Conference Speaker",
-    description: "Shared insights on modern web development practices at major tech conferences"
+    title: "Learning Hub",
+    description: "Access curated tech tutorials, courses and learning paths across web dev, AI, cloud and more",
+    icon: BookOpen,
+    color: "from-purple-500 to-pink-500"
   },
   {
-    year: "2022",
-    title: "Open Source Contributor",
-    description: "Active contributor to several popular open-source projects"
+    title: "Tech Blog", 
+    description: "Read and share insightful articles about programming, new technologies and best practices",
+    icon: Code,
+    color: "from-blue-500 to-cyan-500"
   },
   {
-    year: "2021",
-    title: "Tech Blog Launch",
-    description: "Started sharing knowledge and experiences with the developer community"
+    title: "Discoveries",
+    description: "Stay up to date with the latest tech news, tools and innovations from around the web",
+    icon: Globe,
+    color: "from-green-500 to-emerald-500"
+  },
+  {
+    title: "Community",
+    description: "Connect with other developers, share knowledge and grow together",
+    icon: Users,
+    color: "from-orange-500 to-yellow-500"
   }
 ];
 
+// Add this at the top of the file after imports
+const clipPathStyle = `
+.polygon-clip {
+  clip-path: polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%);
+}
+`;
+
 const AboutPage = () => {
   return (
-    <div className="min-h-screen p-8">
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 via-black to-zinc-900">
+      <div className="absolute inset-0 -z-10 pointer-events-none bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_110%)]" />
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="space-y-8"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 1 }}
+        className="max-w-7xl mx-auto px-4 py-16 sm:px-6 lg:px-8 relative"
       >
-        {/* Header Section */}
-        <div className="flex items-center space-x-2 mb-6">
-          <motion.div
-            whileHover={{ rotate: 360 }}
-            transition={{ duration: 0.5 }}
-          >
-            <User className="w-5 h-5 text-purple-500" />
-          </motion.div>
-          <span className="text-sm">About the Nerd</span>
-        </div>
-
         {/* Hero Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <motion.h1 
-              className="text-4xl lg:text-6xl font-light leading-tight mb-6"
-              variants={{
-                hidden: { opacity: 0, y: 20 },
-                visible: { opacity: 1, y: 0 }
-              }}
-              initial="hidden"
-              animate="visible"
-              transition={{ duration: 0.5 }}
-            >
-              Passionate About
-              <div className="text-purple-500">Technology & Innovation</div>
-            </motion.h1>
-            
-            <p className="text-gray-400 text-lg mb-8">
-              Hey there! I&apos;m a tech enthusiast who loves exploring and sharing knowledge about the latest in technology. 
-              From coding to AI, I&apos;m always excited to learn and create something new.
-            </p>
-
-            <div className="flex items-center space-x-6 text-sm text-gray-500">
-              <div className="flex items-center space-x-2">
-                <Code className="w-4 h-4" />
-                <span>5+ Years Coding</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Coffee className="w-4 h-4" />
-                <span>∞ Cups of Coffee</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Heart className="w-4 h-4" />
-                <span>Love for Tech</span>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Skills Section */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.3 }}
-            className="space-y-6"
-          >
-            {skills.map((skill) => {
-              const Icon = skill.icon;
-              return (
-                <div key={skill.name} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Icon className="w-4 h-4 text-purple-500" />
-                      <span className="text-sm">{skill.name}</span>
-                    </div>
-                    <span className="text-sm text-gray-500">{skill.level}%</span>
-                  </div>
-                  <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${skill.level}%` }}
-                      transition={{ duration: 1, delay: 0.5 }}
-                      className="h-full bg-purple-500 rounded-full"
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </motion.div>
-        </div>
-
-        {/* Interests Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12"
-        >
-          {interests.map((interest) => (
+        <div className="relative isolate overflow-hidden">
+          <div className="mx-auto max-w-4xl text-center">
             <motion.div
-              key={interest}
-              whileHover={{ scale: 1.05 }}
-              className="bg-zinc-900 rounded-xl p-6 text-center"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="flex items-center justify-center space-x-3 mb-8"
             >
-              <Zap className="w-6 h-6 text-purple-500 mx-auto mb-4" />
-              <span className="text-gray-300">{interest}</span>
+              <Brain className="w-12 h-12 text-purple-500" />
+              <h1 className="text-5xl md:text-7xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500">
+                KnowItAll
+              </h1>
             </motion.div>
-          ))}
-        </motion.div>
 
-        {/* Journey Section */}
-        <div className="mt-16">
-          <h2 className="text-2xl font-light mb-8 flex items-center space-x-3">
-            <BookOpen className="w-6 h-6 text-purple-500" />
-            <span>My Journey</span>
-          </h2>
-          
-          <div className="space-y-8">
-            {achievements.map((achievement, index) => (
-              <motion.div
-                key={achievement.year}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.2 * index }}
-                className="flex items-start space-x-4"
-              >
-                <div className="flex-shrink-0 w-24">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-purple-500 rounded-full" />
-                    <span className="text-sm text-gray-500">{achievement.year}</span>
-                  </div>
-                </div>
-                <div className="flex-grow bg-zinc-900 rounded-xl p-6">
-                  <h3 className="text-lg font-semibold mb-2">{achievement.title}</h3>
-                  <p className="text-gray-500 text-sm">{achievement.description}</p>
-                </div>
-              </motion.div>
-            ))}
+            <motion.p
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="text-xl md:text-2xl text-zinc-300 max-w-2xl mx-auto leading-relaxed"
+            >
+              Your one-stop platform for learning new technologies, sharing knowledge, and discovering the latest in tech.
+            </motion.p>
           </div>
         </div>
 
-        {/* Call to Action */}
-        <motion.div 
-          initial={{ opacity: 0, y: 50 }}
+        {/* Features Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.7 }}
-          className="bg-gradient-to-r from-purple-500/20 to-blue-500/20 rounded-xl p-8 mt-12 text-center"
+          transition={{ delay: 0.5 }}
+          className="mt-32"
         >
-          <Award className="w-8 h-8 text-purple-500 mx-auto mb-4" />
-          <h3 className="text-2xl font-semibold mb-4">Let&apos;s Connect!</h3>
-          <p className="text-gray-400 mb-6">Always excited to meet fellow tech enthusiasts and collaborate on interesting projects</p>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="flex items-center space-x-2 bg-purple-500 hover:bg-purple-600 text-white px-8 py-3 rounded-full text-sm font-medium transition-colors mx-auto"
-          >
-            <span>Get in Touch</span>
-            <Rocket className="w-4 h-4" />
-          </motion.button>
+          <div className="mx-auto max-w-7xl">
+            {features.map((feature, index) => {
+              const Icon = feature.icon;
+              return (
+                <motion.div
+                  key={feature.title}
+                  initial={{ opacity: 0, x: index % 2 === 0 ? -20 : 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.2 * index }}
+                  className={`flex items-start gap-x-8 mb-24 ${
+                    index % 2 === 0 ? 'md:flex-row' : 'md:flex-row-reverse'
+                  }`}
+                >
+                  <div className={`flex-1 relative group p-8`}>
+                    <div className="absolute inset-0 bg-gradient-to-br from-zinc-800/50 to-transparent rounded-3xl opacity-0 group-hover:opacity-100 transition-all duration-500" />
+                    <div className="relative">
+                      <div className={`inline-flex rounded-2xl bg-gradient-to-br ${feature.color} p-4 shadow-lg mb-6 group-hover:scale-110 transition-transform duration-300`}>
+                        <Icon className="h-8 w-8 text-white" />
+                      </div>
+                      <h3 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-300 mb-4">
+                        {feature.title}
+                      </h3>
+                      <p className="text-lg text-zinc-400 leading-relaxed max-w-xl">
+                        {feature.description}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex-1 relative hidden md:block">
+                    <div className={`absolute inset-0 bg-gradient-to-br ${feature.color} opacity-5 blur-3xl rounded-full`} />
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
         </motion.div>
+
+        {/* CTA Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7 }}
+          className="relative isolate mt-32 px-6 py-16 sm:py-24 lg:px-8"
+        >
+          <div className="absolute inset-0 -z-10 transform-gpu overflow-hidden blur-3xl" aria-hidden="true">
+            <div className="relative aspect-[1155/678] w-[36.125rem] -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-purple-500 to-pink-500 opacity-30 polygon-clip" />
+          </div>
+          <div className="mx-auto max-w-2xl text-center relative">
+            <h2 className="text-4xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 sm:text-5xl">
+              Ready to Start Learning?
+            </h2>
+            <p className="mt-6 text-lg leading-8 text-zinc-300">
+              Join our community of tech enthusiasts and start your learning journey today.
+            </p>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="group mt-10 inline-flex items-center gap-x-3 rounded-full bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 px-10 py-4 text-lg font-semibold text-white shadow-sm hover:shadow-purple-500/25 hover:shadow-lg transition-all duration-300"
+            >
+              <Link href="/learning">
+                <span>Get Started</span>
+                <Rocket className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </Link>
+            </motion.button>
+          </div>
+        </motion.div>
+
       </motion.div>
+      <style jsx>{clipPathStyle}</style>
     </div>
   );
 };
 
-export default AboutPage; 
+export default AboutPage;

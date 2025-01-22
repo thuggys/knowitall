@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Home, Code, BookOpen, Bot, Lightbulb, Users, FileText, LogOut, User as UserIcon, Menu, X, Settings, ChevronUp } from 'lucide-react';
@@ -155,10 +156,12 @@ const Sidebar = () => {
             >
               <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center overflow-hidden">
                 {avatarUrl ? (
-                  <img 
+                  <Image 
                     src={avatarUrl}
                     alt={userName || user.email || ''}
-                    className="w-8 h-8 rounded-full object-cover"
+                    width={32}
+                    height={32}
+                    className="rounded-full object-cover"
                   />
                 ) : (
                   <UserIcon className="w-4 h-4 text-purple-500" />
