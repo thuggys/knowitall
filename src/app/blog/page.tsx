@@ -6,6 +6,7 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Bookmark, Heart, Hash, Search, Plus, TrendingUp, Clock, Filter } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import SignInModal from '../components/SignInModal';
 
 interface BlogPost {
   id: string;
@@ -46,6 +47,7 @@ export default function BlogPage() {
   const [selectedTag, setSelectedTag] = React.useState<string | null>(null);
   const [sortBy, setSortBy] = React.useState<'latest' | 'popular'>('latest');
   const [user, setUser] = React.useState<User | null>(null);
+  const [isSignInModalOpen, setIsSignInModalOpen] = React.useState(false);
 
   // Fetch user and posts
   React.useEffect(() => {
@@ -54,12 +56,19 @@ export default function BlogPage() {
         setLoading(true);
         setError(null);
         
-        // Get current user
-        const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
-        if (userError) throw userError;
+        // Get current user without throwing error if not authenticated
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          setUser(null);
+          setPosts([]);
+          setLoading(false);
+          return;
+        }
+
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
         setUser(currentUser);
 
-        // Fetch posts with author info and counts
+        // Only fetch posts if user is authenticated
         let query = supabase
           .from('blogs')
           .select(`
@@ -140,6 +149,7 @@ export default function BlogPage() {
 
   return (
     <div className="min-h-screen p-4 md:p-8">
+      <SignInModal isOpen={isSignInModalOpen} onClose={() => setIsSignInModalOpen(false)} />
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -151,7 +161,7 @@ export default function BlogPage() {
             <h1 className="text-2xl font-semibold">Blog Posts</h1>
             <p className="text-zinc-400">Share your thoughts and ideas with the community</p>
           </div>
-          {user && (
+          {user ? (
             <Link
               href="/blog/new"
               className="inline-flex items-center space-x-2 bg-purple-500 hover:bg-purple-600 px-4 py-2 rounded-lg transition-colors"
@@ -159,63 +169,83 @@ export default function BlogPage() {
               <Plus className="w-4 h-4" />
               <span>Write a Post</span>
             </Link>
+          ) : (
+            <button
+              onClick={() => setIsSignInModalOpen(true)}
+              className="inline-flex items-center space-x-2 bg-purple-500 hover:bg-purple-600 px-4 py-2 rounded-lg transition-colors"
+            >
+              <span>Sign in to Write</span>
+            </button>
           )}
         </div>
 
         {/* Search and Filters */}
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-            <input
-              type="text"
-              placeholder="Search posts..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-zinc-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
+        {user ? (
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+              <input
+                type="text"
+                placeholder="Search posts..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-zinc-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <Filter className="w-4 h-4 text-zinc-400" />
+              <select
+                value={selectedTag || ''}
+                onChange={(e) => setSelectedTag(e.target.value || null)}
+                className="bg-zinc-900 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                aria-label="Filter posts by tag"
+              >
+                <option value="">All Tags</option>
+                {allTags.map(tag => (
+                  <option key={tag} value={tag}>{tag}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setSortBy('latest')}
+                className={`inline-flex items-center space-x-1 px-3 py-2 rounded-lg transition-colors ${
+                  sortBy === 'latest' 
+                    ? 'bg-purple-500 text-white' 
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Clock className="w-4 h-4" />
+                <span>Latest</span>
+              </button>
+              <button
+                onClick={() => setSortBy('popular')}
+                className={`inline-flex items-center space-x-1 px-3 py-2 rounded-lg transition-colors ${
+                  sortBy === 'popular' 
+                    ? 'bg-purple-500 text-white' 
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <TrendingUp className="w-4 h-4" />
+                <span>Popular</span>
+              </button>
+            </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <Filter className="w-4 h-4 text-zinc-400" />
-            <select
-              value={selectedTag || ''}
-              onChange={(e) => setSelectedTag(e.target.value || null)}
-              className="bg-zinc-900 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
-              aria-label="Filter posts by tag"
-            >
-              <option value="">All Tags</option>
-              {allTags.map(tag => (
-                <option key={tag} value={tag}>{tag}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-center space-x-2">
+        ) : (
+          <div className="text-center py-12 bg-zinc-900 rounded-xl">
+            <h2 className="text-xl font-semibold mb-2">Please Sign In</h2>
+            <p className="text-zinc-400 mb-4">Sign in to access all blog features and content</p>
             <button
-              onClick={() => setSortBy('latest')}
-              className={`inline-flex items-center space-x-1 px-3 py-2 rounded-lg transition-colors ${
-                sortBy === 'latest' 
-                  ? 'bg-purple-500 text-white' 
-                  : 'text-zinc-400 hover:text-white'
-              }`}
+              onClick={() => setIsSignInModalOpen(true)}
+              className="inline-flex items-center space-x-2 bg-purple-500 hover:bg-purple-600 px-6 py-3 rounded-lg transition-colors"
             >
-              <Clock className="w-4 h-4" />
-              <span>Latest</span>
-            </button>
-            <button
-              onClick={() => setSortBy('popular')}
-              className={`inline-flex items-center space-x-1 px-3 py-2 rounded-lg transition-colors ${
-                sortBy === 'popular' 
-                  ? 'bg-purple-500 text-white' 
-                  : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              <TrendingUp className="w-4 h-4" />
-              <span>Popular</span>
+              <span>Sign In</span>
             </button>
           </div>
-        </div>
+        )}
 
         {/* Posts Grid */}
-        {loading ? (
+        {!user ? null : loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {[...Array(4)].map((_, i) => (
               <div
@@ -235,15 +265,13 @@ export default function BlogPage() {
         ) : posts.length === 0 ? (
           <div className="text-center py-12 text-zinc-400">
             <p>No blog posts found</p>
-            {user && (
-              <Link
-                href="/blog/new"
-                className="inline-flex items-center space-x-2 text-purple-500 hover:text-purple-400 mt-4"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Write your first post</span>
-              </Link>
-            )}
+            <Link
+              href="/blog/new"
+              className="inline-flex items-center space-x-2 text-purple-500 hover:text-purple-400 mt-4"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Write your first post</span>
+            </Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
